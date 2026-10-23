@@ -9,7 +9,7 @@ export const CONTENT_TYPES = [
 ] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
-export const STATUSES = ["relevant", "review", "unrelated", "own", "unclassified"] as const;
+export const STATUSES = ["relevant", "review", "unrelated", "own", "out_of_region", "unclassified"] as const;
 export type Status = (typeof STATUSES)[number];
 
 export type SourceType = "search" | "hashtag" | "fan_account" | "profile" | "sound";
@@ -35,6 +35,7 @@ export type Artist = {
   traits: string;
   notes: string;
   region: string | null;
+  countries: string[]; // uploader countries of the audience, e.g. ["NL", "BE"]; empty = all
   last_ingest_at: string | null; // end of the last ingest; refresh mode only searches since then
   created_at: string;
 };
@@ -72,6 +73,7 @@ export type VideoStatusRow = VideoRow & {
   status: Status;
   human_vote: boolean | null;
   download_path: string | null;
+  uploader_region: string | null;
 };
 
 export type Verdict = {
@@ -81,3 +83,9 @@ export type Verdict = {
   usability: number | null;
   reason: string;
 };
+
+// Videos posted from outside the artist's countries skip the paid checks (status out_of_region).
+// A missing uploader region counts as in-region.
+export function outOfRegion(artist: Pick<Artist, "countries">, region: string | null | undefined): boolean {
+  return artist.countries.length > 0 && !!region && !artist.countries.includes(region.toUpperCase());
+}

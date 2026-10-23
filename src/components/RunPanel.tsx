@@ -150,6 +150,7 @@ function IngestSummary({ s }: { s: IngestStats }) {
       {s.ownVsOther && (
         <p className="mt-1 text-xs text-zinc-600">
           {s.ownVsOther.other} van andere accounts · {s.ownVsOther.own} van eigen account(s)
+          {s.outOfRegion ? ` · ${s.outOfRegion} buiten regio` : ""}
         </p>
       )}
       {s.discoveredSounds?.length > 0 && (
@@ -190,6 +191,7 @@ function ClassifySummary({ s }: { s: ClassifyStats }) {
         <span className="text-amber-700">{s.distribution.review} review</span> ·{" "}
         <span className="text-zinc-500">{s.distribution.unrelated} unrelated</span>
         {` · ${s.distribution.own} eigen posts`}
+        {s.distribution.out_of_region ? ` · ${s.distribution.out_of_region} buiten regio` : ""}
         {s.distribution.unclassified ? ` · ${s.distribution.unclassified} ongeclassificeerd` : ""}
       </p>
       <p className="mt-1 text-xs text-zinc-500">

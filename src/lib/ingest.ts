@@ -5,7 +5,7 @@ import { socialFetch, type DatePosted, type SfListResponse } from "./socialfetch
 import { db } from "./supabase";
 import { cacheThumbnail } from "./thumbnails";
 import { chunks, containsTerm, mapLimit, uniq } from "./util";
-import type { Artist, Source, SourceType } from "./types";
+import { outOfRegion, type Artist, type Source, type SourceType } from "./types";
 
 type Task = { type: SourceType; query: string; fetchPage: (cursor?: string) => Promise<SfListResponse> };
 
@@ -31,6 +31,7 @@ export type IngestStats = {
   existingVideos: number;
   perSource: Record<SourceType, { found: number; unique: number }>;
   ownVsOther: { own: number; other: number }; // unique videos from the artist's accounts vs everyone else
+  outOfRegion: number; // posted from outside artist.countries: stored, but no thumbnail and no checks
   discoveredSounds: { id: string; title: string | null }[];
   thumbnails: { cached: number; failed: number };
   credits: number;
@@ -223,8 +224,12 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
     for (const row of data ?? []) existing.set(row.id, row);
   }
 
-  // Cache thumbnails now: TikTok CDN links expire within hours/days.
-  const needThumb = ids.filter((id) => !existing.get(id)?.thumbnail_cached_path && found.get(id)!.video.thumbnail_url);
+  // Cache thumbnails now: TikTok CDN links expire within hours/days. Not for videos from outside
+  // the artist's countries (scripts/backfill-thumbnails.ts fetches them if the countries change).
+  const regionOf = (id: string) => found.get(id)!.video.raw.region as string | null;
+  const needThumb = ids.filter(
+    (id) => !existing.get(id)?.thumbnail_cached_path && found.get(id)!.video.thumbnail_url && !outOfRegion(artist, regionOf(id)),
+  );
   const cachedPaths = new Map<string, string>();
   let thumbFailed = 0;
   await mapLimit(needThumb, 8, async (id) => {
@@ -274,6 +279,7 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
       own: rows.filter((r) => ownHandles.includes(r.author_handle ?? "")).length,
       other: rows.filter((r) => !ownHandles.includes(r.author_handle ?? "")).length,
     },
+    outOfRegion: ids.filter((id) => outOfRegion(artist, regionOf(id))).length,
     discoveredSounds,
     thumbnails: { cached: cachedPaths.size, failed: thumbFailed },
     credits: taskStats.reduce((n, t) => n + t.credits, 0),

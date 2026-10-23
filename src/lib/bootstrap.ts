@@ -18,6 +18,9 @@ const CardSchema = z.object({
       "Other names/spellings fans use (real name, nicknames). Each alias becomes a search query, so only include ones specific to this artist: never a plain first name or common word",
     ),
   region: z.string().describe("Two-letter country code of the artist's main market, e.g. NL"),
+  countries: z
+    .array(z.string())
+    .describe("Two-letter codes of the countries where most of the audience posting about this artist lives, e.g. [\"NL\", \"BE\"] for a Dutch-language artist. Empty for an artist with a worldwide audience"),
   notes: z
     .string()
     .describe("2-4 sentences: who the artist is (genre, city, scene, known shows), and namesakes it must NOT be confused with"),
@@ -85,6 +88,7 @@ ${noise.map(line).join("\n")}`;
   return {
     ...card,
     region: card.region.toUpperCase().slice(0, 2),
+    countries: card.countries.map((c) => c.toUpperCase().slice(0, 2)),
     hashtags: card.hashtags.map((h) => h.replace(/^#/, "").toLowerCase()),
     blocked_accounts: card.blocked_accounts.map((h) => h.replace(/^@/, "").toLowerCase()),
     handles: [handle],

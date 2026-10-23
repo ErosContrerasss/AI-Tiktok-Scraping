@@ -12,6 +12,7 @@ const STATUS_STYLE: Record<string, string> = {
   review: "bg-amber-100 text-amber-800",
   unrelated: "bg-zinc-200 text-zinc-600",
   own: "bg-blue-100 text-blue-800",
+  out_of_region: "bg-zinc-100 text-zinc-500",
   unclassified: "bg-zinc-100 text-zinc-500",
 };
 
@@ -75,6 +76,7 @@ function VideoCard({ v, onPlay }: { v: GridVideo; onPlay: () => void }) {
       <div className="flex flex-1 flex-col gap-1 p-2">
         <a href={v.url ?? "#"} target="_blank" rel="noreferrer" className="truncate font-medium hover:underline">
           @{v.author_handle}
+          {v.uploader_region ? <span className="ml-1 font-normal text-zinc-400">{v.uploader_region}</span> : null}
         </a>
         <div className="text-zinc-600">
           ▶ {formatCount(v.views)} · ♥ {formatCount(v.likes)} · {v.posted_at ? new Date(v.posted_at).toLocaleDateString("nl-NL") : "–"}

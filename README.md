@@ -34,7 +34,8 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 **Classificatie** (`src/lib/classify/`) is een trechter. Elke laag schrijft rijen naar `classifications`; de view `video_status` kiest het effectieve oordeel (human > rules > llm) en geeft posts van de eigen accounts status `own`:
 - **Laag 0 – regels:** geblokkeerd account of negatieve term → unrelated. Al het andere (tags, songtitels, collaborators, eigen sound, bekend fanaccount) gaat als hint naar de LLM.
 - **Laag 1 – LLM:** caption, hashtags, auteur en sound gaan via een Zod-schema met structured output naar Claude Haiku (`ANTHROPIC_API_KEY`) of Gemini (`GEMINI_API_KEY`). Het model schat **de kans dat de artiest in beeld is** en geeft daarnaast `content_type`, `usability` en `reason` terug. De duimpjes uit de UI dienen als few-shot voorbeelden.
-- **Routing:** kans ≥ 0.85 → relevant (footage), ≤ 0.3 → unrelated, daartussen → review.
+- **Routing:** tekstlagen: kans ≥ 0,85 → relevant (footage), ≤ 0,3 → unrelated, daartussen → review. Frames (`vision`): ≥ 0,7 → relevant, ≤ 0,5 → unrelated. Gemeten op 111 met de hand gelabelde video's: tussen 0,3 en 0,5 zat geen enkele echte.
+- **Landen:** per artiest stel je de landen van het publiek in (bv. NL, BE). Video's van uploaders uit andere landen krijgen status `out_of_region`: ze worden bewaard, maar zonder thumbnail en zonder checks. Een duim omhoog of een eerder "relevant"-oordeel van de frames-check wint altijd. Bij Russo en Cristiand bleef zo 92–97% van de bruikbare clips staan, terwijl de review-bak 3–5× kleiner werd.
 - **Een laag toevoegen:** voeg een stap toe in `classifyArtist`, plus de waarde in de check-constraint `layer` en in de prioriteit van de view.
 
 **Dashboard:** tabs relevant/review/unrelated/own, met filters op content_type en periode en sortering. Verder:

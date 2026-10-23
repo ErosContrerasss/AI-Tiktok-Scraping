@@ -14,6 +14,7 @@ const FIELDS: { key: keyof Artist; label: string; hint: string }[] = [
   { key: "negative_terms", label: "Negatieve termen", hint: "Bevat de video dit → unrelated" },
   { key: "blocked_accounts", label: "Geblokkeerde accounts", hint: "Zonder @, altijd unrelated" },
   { key: "fan_accounts", label: "Fanaccounts", hint: "Accounts die veel footage posten; hele profiel wordt opgehaald" },
+  { key: "countries", label: "Landen van het publiek", hint: "Landcodes, bv. NL en BE. Video's van uploaders uit andere landen gaan naar 'out_of_region' en worden niet gecheckt. Leeg = alle landen" },
   { key: "extra_queries", label: "Extra zoekopdrachten", hint: "Volledige zoektermen, bv. \"<naam> afas\" of \"<naam> zwarte cross\"" },
 ];
 

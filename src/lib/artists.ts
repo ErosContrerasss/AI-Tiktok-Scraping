@@ -34,6 +34,7 @@ export const ArtistInput = z.object({
     .optional()
     .nullable()
     .transform((v) => v?.trim() || null),
+  countries: list.transform((xs) => xs.map((x) => x.toUpperCase().slice(0, 2))),
   region: z
     .string()
     .optional()

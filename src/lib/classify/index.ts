@@ -4,7 +4,7 @@ import { db } from "../supabase";
 import { FRAME_COUNT, grabFrames, pruneFrames } from "../frames";
 import { buildArtistSheet, loadSheet, type SheetImage } from "../sheet";
 import { chunks, mapLimit } from "../util";
-import type { Artist, ContentType, Status, VideoRow } from "../types";
+import { outOfRegion, type Artist, type ContentType, type Status, type VideoRow } from "../types";
 import { classifyFramesWithJev, classifyWithJev, JEV_MODEL, type VisualVerdict } from "./jev";
 import { classifyWithLlm, llmProvider, type FewShot, type LlmInput } from "./llm";
 import { applyRules } from "./rules";
@@ -30,7 +30,7 @@ export type ClassifyStats = {
 type VideoForClassify = Pick<
   VideoRow,
   "id" | "author_handle" | "caption" | "hashtags" | "sound_id" | "sound_title" | "sound_author"
->;
+> & { region?: string | null };
 
 export async function classifyArtist(
   artistId: string,
@@ -40,7 +40,11 @@ export async function classifyArtist(
   const { data: artist } = await supabase.from("artists").select("*").eq("id", artistId).single<Artist>();
   if (!artist) throw new Error(`Artist ${artistId} not found`);
 
-  const videos = await selectAll<VideoForClassify>("videos", "id, author_handle, caption, hashtags, sound_id, sound_title, sound_author", artistId);
+  const videos = await selectAll<VideoForClassify>(
+    "videos",
+    "id, author_handle, caption, hashtags, sound_id, sound_title, sound_author, region:raw->>region",
+    artistId,
+  );
   const layers = new Map<string, Set<string>>();
   const rulesUnrelated = new Set<string>();
   for (const chunk of chunks(videos.map((v) => v.id), 300)) {
@@ -77,7 +81,7 @@ export async function classifyArtist(
     rules: { unrelated: 0 },
     llm: { classified: 0, failed: 0, errors: [] },
     vision: { checked: 0, failed: 0, credits: 0, errors: [] },
-    distribution: { relevant: 0, review: 0, unrelated: 0, own: 0, unclassified: 0 },
+    distribution: { relevant: 0, review: 0, unrelated: 0, own: 0, out_of_region: 0, unclassified: 0 },
     byContentType: {},
   };
 
@@ -86,7 +90,8 @@ export async function classifyArtist(
   const own = new Set(artist.handles);
   for (const v of videos) {
     const done = layers.get(v.id) ?? new Set();
-    if (done.has("human") || own.has(v.author_handle ?? "")) continue;
+    // Outside the artist's countries: no paid checks (status out_of_region in the view).
+    if (done.has("human") || own.has(v.author_handle ?? "") || outOfRegion(artist, v.region)) continue;
     const { verdict, hints } = applyRules(artist, v);
     if (verdict && !done.has("rules")) {
       ruleRows.push({ video_id: v.id, layer: "rules", ...verdict });
@@ -184,7 +189,7 @@ async function runVision(
       artist.id,
     )
   )
-    .filter((v) => v.layer !== "human" && v.status !== "own" && v.layer !== "rules")
+    .filter((v) => v.layer !== "human" && v.status !== "own" && v.status !== "out_of_region" && v.layer !== "rules")
     .filter((v) => {
       const checked = layers.get(v.id)?.has("vision") || v.layer === "vision";
       // forceVision re-checks everything vision saw before, including what it demoted.
