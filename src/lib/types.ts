@@ -54,6 +54,8 @@ export type VideoRow = {
   likes: number | null;
   comments: number | null;
   shares: number | null;
+  saves: number | null;
+  author_followers: number | null; // uploader's followers when last seen
   duration_ms: number | null;
   posted_at: string | null;
   thumbnail_url: string | null;

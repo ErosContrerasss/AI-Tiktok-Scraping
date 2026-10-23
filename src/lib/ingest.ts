@@ -257,6 +257,23 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
     const { error: upsertError } = await supabase.from("videos").upsert(chunk, { onConflict: "id" });
     if (upsertError) throw new Error(`Upsert videos failed: ${upsertError.message}`);
   }
+  // A snapshot of the numbers on every ingest: growth over time is what tells a real
+  // outlier apart from an old video that slowly piled up views.
+  for (const chunk of chunks(rows, 500)) {
+    await supabase.from("video_stats").upsert(
+      chunk.map((r) => ({
+        video_id: r.id,
+        captured_at: now,
+        views: r.views,
+        likes: r.likes,
+        comments: r.comments,
+        shares: r.shares,
+        saves: r.saves,
+        author_followers: r.author_followers,
+      })),
+      { onConflict: "video_id,captured_at", ignoreDuplicates: true },
+    );
+  }
 
   const ownHandles = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
   const stats: IngestStats = {

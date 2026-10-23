@@ -21,6 +21,8 @@ export type NormalizedVideo = {
   likes: number | null;
   comments: number | null;
   shares: number | null;
+  saves: number | null;
+  author_followers: number | null; // uploader's followers when last seen
   duration_ms: number | null;
   posted_at: string | null;
   thumbnail_url: string | null;
@@ -58,6 +60,8 @@ export function normalizeVideo(v: SfVideo): NormalizedVideo {
     likes: v.stats?.likes ?? null,
     comments: v.stats?.comments ?? null,
     shares: v.stats?.shares ?? null,
+    saves: v.stats?.saves ?? null,
+    author_followers: typeof author.follower_count === "number" ? author.follower_count : null,
     duration_ms: v.durationMs,
     posted_at: v.createdAt,
     thumbnail_url: v.thumbnailUrl,
