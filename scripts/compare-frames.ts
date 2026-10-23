@@ -48,7 +48,7 @@ async function main() {
       frames.forEach((f, i) => writeFileSync(`${outDir}/${v.id}_${String(i).padStart(2, "0")}.jpg`, f.image));
       const four = [1, 4, 7, 10].map((i) => frames[i]?.image).filter(Boolean) as Buffer[];
       const t0 = Date.now();
-      const visual = await classifyFramesWithJev(refs, frames, { artist, post: v });
+      const visual = await classifyFramesWithJev(refs.map((image) => ({ label: "reference", image })), frames, { artist, post: v });
       const visualMs = Date.now() - t0;
       const [text, captionFrames] = await Promise.all([
         classifyWithJev(artist, { ...v, hints }, []),

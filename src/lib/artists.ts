@@ -24,14 +24,24 @@ export const ArtistInput = z.object({
   fan_accounts: list,
   extra_queries: list,
   notes: z.string().optional().transform((v) => (v ?? "").trim()),
+  instagram_handle: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => v?.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//, "").split(/[/?#]/)[0].toLowerCase() || null),
+  spotify_url: z
+    .string()
+    .optional()
+    .nullable()
+    .transform((v) => v?.trim() || null),
   region: z
     .string()
     .optional()
     .transform((v) => (v?.trim() ? v.trim().toUpperCase() : null)),
-}) satisfies z.ZodType<Omit<Artist, "id" | "created_at" | "reference_images">>;
+}) satisfies z.ZodType<Omit<Artist, "id" | "created_at" | "reference_images" | "artist_sheet" | "traits">>;
 
 // Handles/accounts are stored lower-case without @, hashtags without #.
-function clean(input: Omit<Artist, "id" | "created_at" | "reference_images">) {
+function clean(input: Omit<Artist, "id" | "created_at" | "reference_images" | "artist_sheet" | "traits">) {
   const strip = (xs: string[], prefix: string) => xs.map((x) => x.replace(new RegExp(`^${prefix}`), "").toLowerCase());
   return {
     ...input,

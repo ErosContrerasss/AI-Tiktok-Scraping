@@ -130,7 +130,7 @@ export type VisualVerdict = Verdict & {
 // combined judgment that may also use the post text as secondary context: faces fail on
 // sunglasses, distant stages and look-alikes, captions fail on namesakes and song-only use.
 export async function classifyFramesWithJev(
-  references: Buffer[],
+  references: { label: string; image: Buffer }[],
   frames: { image: Buffer; atSeconds: number | null }[],
   context?: { artist: Artist; post: LlmInput },
 ): Promise<VisualVerdict> {
@@ -138,7 +138,9 @@ export async function classifyFramesWithJev(
   const response = await client.systemOne(
     {
       state: {
-        reference_photos: references.map((r) => image(r)),
+        // Labelled photos of the artist (close-up, side, sunglasses, stage, …) and visual traits.
+        reference_photos: Object.fromEntries(references.map((r, i) => [`${r.label}_${i + 1}`, image(r.image)])),
+        ...(context?.artist.traits ? { artist_traits: context.artist.traits } : {}),
         frames: frames.map((f) => ({ at_seconds: f.atSeconds, image: image(f.image) })),
         ...(context
           ? {

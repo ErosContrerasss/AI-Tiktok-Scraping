@@ -29,6 +29,10 @@ export type Artist = {
   fan_accounts: string[];
   extra_queries: string[];
   reference_images: string[]; // storage paths in the "references" bucket
+  instagram_handle: string | null;
+  spotify_url: string | null;
+  artist_sheet: { slot: "front" | "side" | "sunglasses" | "headwear" | "stage" | "everyday"; path: string; source: string }[];
+  traits: string;
   notes: string;
   region: string | null;
   created_at: string;

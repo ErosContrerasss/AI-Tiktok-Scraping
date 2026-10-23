@@ -24,6 +24,8 @@ export function ArtistForm({ artist, initial }: { artist?: Artist; initial?: Par
   const [name, setName] = useState(start?.name ?? "");
   const [notes, setNotes] = useState(start?.notes ?? "");
   const [region, setRegion] = useState(start?.region ?? "");
+  const [instagram, setInstagram] = useState(start?.instagram_handle ?? "");
+  const [spotify, setSpotify] = useState(start?.spotify_url ?? "");
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(FIELDS.map((f) => [f.key, ((start?.[f.key] as string[]) ?? []).join("\n")])),
   );
@@ -37,7 +39,7 @@ export function ArtistForm({ artist, initial }: { artist?: Artist; initial?: Par
     const res = await fetch(artist ? `/api/artists/${artist.id}` : "/api/artists", {
       method: artist ? "PUT" : "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, notes, region, ...values }),
+      body: JSON.stringify({ name, notes, region, instagram_handle: instagram, spotify_url: spotify, ...values }),
     });
     const body = await res.json();
     setSaving(false);
@@ -69,6 +71,18 @@ export function ArtistForm({ artist, initial }: { artist?: Artist; initial?: Par
             maxLength={2}
             className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm uppercase"
           />
+        </label>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-sm font-medium">Instagram</span>
+          <span className="block text-xs text-zinc-500">Handle of link; bron voor het artist sheet</span>
+          <input value={instagram} onChange={(e) => setInstagram(e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium">Spotify</span>
+          <span className="block text-xs text-zinc-500">Link naar de artiestpagina; leeg = automatisch zoeken</span>
+          <input value={spotify} onChange={(e) => setSpotify(e.target.value)} className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" />
         </label>
       </div>
       <label className="block">

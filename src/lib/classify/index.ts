@@ -2,7 +2,7 @@ import "server-only";
 import { config, env } from "../env";
 import { db } from "../supabase";
 import { FRAME_COUNT, grabFrames } from "../frames";
-import { buildReferences, loadReferences } from "../references";
+import { buildArtistSheet, loadSheet, type SheetImage } from "../sheet";
 import { chunks, mapLimit } from "../util";
 import type { Artist, ContentType, Status, VideoRow } from "../types";
 import { classifyFramesWithJev, classifyWithJev, JEV_MODEL } from "./jev";
@@ -156,17 +156,22 @@ async function runVision(
 ) {
   const supabase = db();
   const useJev = config.classifier === "jev" && !!env.typesafeKey();
-  let references: Buffer[] = [];
+  // Artist sheet (labelled photos from several sources); built on first use.
+  let references: SheetImage[] = [];
   if (useJev) {
-    references = await loadReferences(artist);
+    references = await loadSheet(artist);
     if (!references.length && artist.handles.length) {
-      const built = await buildReferences(artist);
+      const built = await buildArtistSheet(artist);
       stats.vision.credits += built.credits;
-      references = await loadReferences({ ...artist, reference_images: built.paths });
+      const { data: fresh } = await supabase.from("artists").select("*").eq("id", artist.id).single<Artist>();
+      if (fresh) {
+        artist = fresh;
+        references = await loadSheet(fresh);
+      }
     }
   }
   const framesFirst = useJev && references.length > 0;
-  stats.vision.mode = framesFirst ? `frames-first (${references.length} referenties)` : "kandidaten + tekst";
+  stats.vision.mode = framesFirst ? `frames-first (artist sheet: ${references.length} foto's)` : "kandidaten + tekst";
 
   const candidates = (
     await selectAll<{ id: string; status: Status; layer: string | null; relevance: number | null }>(

@@ -51,7 +51,17 @@ Plak een TikTok-link bij "Nieuwe artiest" → "Card voorstellen" (`src/lib/boots
 
 - **Jev (TypeSafe, aanbevolen):** zet `TYPESAFE_API_KEY`. Jev geeft getypeerde, gekalibreerde kansen (Noul/Choice/Score) voor $0,042 per miljoen input-tokens, in ±0,1–0,4 seconde.
   - **Frames-first (laag `vision`):** per video 12 frames (`FRAME_COUNT`) uit de mp4 van TikTok's CDN, vergeleken met **referentiefoto's** van de artiest. Per frame volgt "staat deze persoon erin?" (met tijdstip), plus een eindoordeel waarbij de caption alleen als tweede bewijs telt. Merch, foto's of schermen van de artiest tellen niet. Drempel voor relevant: 0,7.
-  - **Referentiefoto's** (`src/lib/references.ts`) worden automatisch gekozen uit de profielfoto en de covers van eigen posts. Je beheert ze op de artiestpagina.
+  - **Artist sheet** (`src/lib/sheet.ts`, ±6–8 credits per artiest): foto's uit TikTok (profielfoto, covers), Instagram (profielfoto, eigen posts, getagde posts), Apple Music en Spotify.
+    - Jev labelt elke foto: gezicht (Box), zichtbaarheid, zonnebril, pet of capuchon, hoek en situatie.
+    - Eigen Instagram-foto's met één persoon zijn het anker voor wie de artiest is.
+    - Vakken: close-up frontaal, schuin/profiel, zonnebril, pet/capuchon, podium, dagelijks. Plus een korte tekst met kenmerken.
+    - Je beheert het sheet op de artiestpagina en kunt foute foto's verwijderen.
+  - **Meting** (`scripts/eval-vision.ts`, ground truth met de hand gelabeld):
+
+    | Artiest | n | A: caption + 4 frames | B: oude referenties | **C: artist sheet** | V: sheet zonder caption |
+    |---|---|---|---|---|---|
+    | Russo | 45 | F1 0,93 | F1 0,95 | **F1 0,98** | F1 0,98 |
+    | Cristiand | 28 | F1 0,71 (recall 0,56) | F1 0,62 (recall 0,44) | **F1 1,00** | F1 0,90 (2 namesakes) |
 - **LLM:** Claude Haiku of Gemini met een Zod-schema (`CLASSIFIER=llm`). Valt automatisch terug op Gemini als Anthropic geen tegoed heeft.
 - **Evaluatie:** `scripts/compare-classifiers.ts` en `scripts/compare-frames.ts` vergelijken varianten op een steekproef en bewaren frames voor handmatige controle.
 

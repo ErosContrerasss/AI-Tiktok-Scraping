@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { ArtistForm } from "@/components/ArtistForm";
 import { FanAccountSuggestions } from "@/components/FanAccountSuggestions";
 import { QueryYieldTable } from "@/components/QueryYieldTable";
-import { ReferencePhotos } from "@/components/ReferencePhotos";
-import { REFERENCE_BUCKET } from "@/lib/references";
+import { ArtistSheet } from "@/components/ArtistSheet";
+import { SHEET_BUCKET } from "@/lib/sheet";
 import { RunPanel } from "@/components/RunPanel";
 import { VideoGrid, type GridVideo } from "@/components/VideoGrid";
 import { getArtist } from "@/lib/artists";
@@ -61,7 +61,7 @@ export default async function ArtistPage({
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
   );
 
-  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, references] = await Promise.all([
+  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, sheet] = await Promise.all([
     query,
     Promise.all(
       STATUSES.map(async (st) => {
@@ -76,9 +76,9 @@ export default async function ArtistPage({
     suggestFanAccounts(artist),
     queryYield(id),
     Promise.all(
-      artist.reference_images.map(async (path) => {
-        const { data } = await supabase.storage.from(REFERENCE_BUCKET).createSignedUrl(path, 3600);
-        return { path, url: data?.signedUrl ?? "" };
+      artist.artist_sheet.map(async (entry) => {
+        const { data } = await supabase.storage.from(SHEET_BUCKET).createSignedUrl(entry.path, 3600);
+        return { ...entry, url: data?.signedUrl ?? "" };
       }),
     ),
   ]);
@@ -118,7 +118,7 @@ export default async function ArtistPage({
         llmReady={!!llmProvider()}
       />
 
-      <ReferencePhotos artistId={id} references={references} />
+      <ArtistSheet artistId={id} entries={sheet} traits={artist.traits} />
       <FanAccountSuggestions artistId={id} suggestions={suggestions} />
       <QueryYieldTable rows={yields} />
 

@@ -36,6 +36,35 @@ export type SfDownloadResponse = {
   meta: { requestId: string; creditsCharged: number };
 };
 
+type Meta = { requestId: string; creditsCharged: number };
+export type SfInstagramMedia = {
+  url: string | null;
+  mediaType: "image" | "video" | "carousel" | null;
+  imageUrl: string | null;
+  carousel: { imageUrl?: string | null }[] | null;
+};
+export type SfInstagramProfile = {
+  data: {
+    lookupStatus: "found" | "private" | "not_found";
+    profile?: { displayName: string | null; avatarUrl: string | null; avatarUrlHd: string | null } | null;
+    recentMedia: SfInstagramMedia[] | null;
+  };
+  meta: Meta;
+};
+export type SfInstagramMediaPage = {
+  data: { lookupStatus: string; media: SfInstagramMedia[]; page?: { nextCursor: string | null; hasMore: boolean } };
+  meta: Meta;
+};
+export type SfAppleSearch = {
+  data: { artists: { displayName: string; url: string | null; artworkUrl: string | null }[] };
+  meta: Meta;
+};
+export type SfSpotifyArtist = {
+  data: { lookupStatus: "found" | "not_found"; artist?: { displayName: string; avatarUrl: string | null } | null } & Record<string, unknown>;
+  meta: Meta;
+};
+export type SfWebSearch = { data: { results: { title: string; url: string; content: string }[] }; meta: Meta };
+
 export class SocialFetchError extends Error {
   constructor(
     message: string,
@@ -76,4 +105,12 @@ export const socialFetch = {
   download: (url: string) => get<SfDownloadResponse>("/v1/tiktok/videos/download", { url }),
   // Same response shape as download, without hosted copies (1 credit). Used to refresh expired CDN links.
   getVideo: (url: string) => get<SfDownloadResponse>("/v1/tiktok/videos", { url }),
+  instagramProfile: (handle: string) =>
+    get<SfInstagramProfile>(`/v2/instagram/profiles/${encodeURIComponent(handle)}`, { include: "recentMedia" }),
+  // tab "tagged" = posts by others in which the account is tagged (stage photos, fan photos).
+  instagramMedia: (handle: string, tab: "posts" | "tagged", cursor?: string) =>
+    get<SfInstagramMediaPage>(`/v2/instagram/profiles/${encodeURIComponent(handle)}/media`, { tab, cursor }),
+  appleMusicSearch: (query: string) => get<SfAppleSearch>("/v1/apple-music/search", { query, type: "artist" }),
+  spotifyArtist: (url: string) => get<SfSpotifyArtist>("/v1/spotify/artist", { url }),
+  webSearch: (query: string) => get<SfWebSearch>("/v1/web/search", { query }),
 };
