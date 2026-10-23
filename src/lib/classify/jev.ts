@@ -120,9 +120,18 @@ const VISUAL_CONTENT = {
   unrelated: "Anything else without the person from `reference_photos` (text screens, other people, objects, places)",
 };
 
+// Overlaid text per frame (not text that is part of the scene, like a stage logo).
+const TEXT_LEVELS = [
+  "No overlaid text, stickers or emojis",
+  "Only a small watermark, username or logo in a corner",
+  "A caption or text block, stickers or emojis on part of the image",
+  "Text or graphics covering a large part of the image",
+] as const;
+
 export type VisualVerdict = Verdict & {
   model: string;
-  frames: { atSeconds: number | null; p: number }[];
+  // Per frame: is the artist visible (p) and how much overlaid text/stickers (text: 0-3, see TEXT_LEVELS).
+  frames: { atSeconds: number | null; p: number; text: number }[];
 };
 
 // Frames-first: the frames and reference photos are the evidence. Per frame: is the person in
@@ -160,6 +169,12 @@ export async function classifyFramesWithJev(
             noul(`Is the person shown in \`reference_photos\` visible in \`frames[${i}].image\`?`),
           ]),
         ),
+        ...Object.fromEntries(
+          frames.map((_, i) => [
+            `text_${i}`,
+            score(`How much text, captions, stickers or emojis are overlaid on top of \`frames[${i}].image\`?`, TEXT_LEVELS),
+          ]),
+        ),
         on_screen: noul(
           "Do `frames` show the person from `reference_photos` themself, in real footage (not a photo, print or screen of them)? Base this on the frames; use `post_text_secondary`, if present, only to resolve doubt, e.g. a face hidden by sunglasses or a far-away stage.",
         ),
@@ -171,7 +186,13 @@ export async function classifyFramesWithJev(
   );
 
   const answers = response.answers as Record<string, { noul?: number; choice?: string; confidence?: number; score?: number }>;
-  const perFrame = frames.map((f, i) => ({ atSeconds: f.atSeconds, p: answers[`in_frame_${i}`].noul ?? 0 }));
+  const perFrame = frames.map((f, i) => ({
+    atSeconds: f.atSeconds,
+    p: answers[`in_frame_${i}`].noul ?? 0,
+    text: answers[`text_${i}`]?.score ?? 0,
+  }));
+  // Clean = the artist is visible and at most a small watermark is on top.
+  const clean = perFrame.filter((f) => f.p >= 0.7 && f.text < 1.5).length;
   const best = perFrame.reduce((a, b) => (b.p > a.p ? b : a));
   const seen = perFrame.filter((f) => f.p >= 0.7).length;
   const choiceLabel = answers.content_type.choice as keyof typeof VISUAL_CONTENT;
@@ -186,7 +207,7 @@ export async function classifyFramesWithJev(
     confidence: p >= 0.5 ? p : 1 - p,
     content_type: contentType,
     usability: Math.min(5, Math.max(1, Math.round(usability) + 1)),
-    reason: `Jev frames: ${p.toFixed(2)} · gezicht in ${seen}/${frames.length} frames (beste ${best.p.toFixed(2)}${best.atSeconds != null ? ` op ${best.atSeconds}s` : ""}) · ${choiceLabel} ${(answers.content_type.confidence ?? 0).toFixed(2)}`,
+    reason: `Jev frames: ${p.toFixed(2)} · gezicht in ${seen}/${frames.length} frames, ${clean} zonder tekst (beste ${best.p.toFixed(2)}${best.atSeconds != null ? ` op ${best.atSeconds}s` : ""}) · ${choiceLabel} ${(answers.content_type.confidence ?? 0).toFixed(2)}`,
     model: response.model ?? JEV_MODEL,
     frames: perFrame,
   };

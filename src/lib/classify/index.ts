@@ -5,7 +5,7 @@ import { FRAME_COUNT, grabFrames } from "../frames";
 import { buildArtistSheet, loadSheet, type SheetImage } from "../sheet";
 import { chunks, mapLimit } from "../util";
 import type { Artist, ContentType, Status, VideoRow } from "../types";
-import { classifyFramesWithJev, classifyWithJev, JEV_MODEL } from "./jev";
+import { classifyFramesWithJev, classifyWithJev, JEV_MODEL, type VisualVerdict } from "./jev";
 import { classifyWithLlm, llmProvider, type FewShot, type LlmInput } from "./llm";
 import { applyRules } from "./rules";
 
@@ -209,8 +209,9 @@ async function runVision(
       const { frames, credits } = await grabFrames(video, framesFirst ? FRAME_COUNT : 4);
       stats.vision.credits += credits;
       const { hints } = applyRules(artist, video);
+      let perFrame: VisualVerdict["frames"] = [];
       const verdict = framesFirst
-        ? await classifyFramesWithJev(references, frames, { artist, post: video })
+        ? await classifyFramesWithJev(references, frames, { artist, post: video }).then((v) => ((perFrame = v.frames), v))
         : await judge(artist, { ...video, hints }, examples, frames.map((f) => f.image));
       await supabase.from("classifications").insert({
         video_id: video.id,
@@ -221,6 +222,9 @@ async function runVision(
         content_type: verdict.content_type,
         usability: verdict.usability,
         reason: verdict.reason,
+        details: perFrame.length
+          ? { frames: perFrame.map((f) => ({ at_seconds: f.atSeconds, artist_p: f.p, text_level: f.text })), sheet_size: references.length }
+          : null,
       });
       stats.vision.checked++;
     } catch (e) {
