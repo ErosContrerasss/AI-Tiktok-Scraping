@@ -35,7 +35,7 @@ function systemPrompt(artist: Artist, examples: FewShot[]): string {
 Search by name returns lots of noise: other people or things with the same name, unrelated words in other languages, random trending content. Only mark is_about_artist=true when the metadata points to THIS artist.
 
 ARTIST CARD
-Name: ${artist.name}
+Name: ${artist.name}${artist.region ? `\nCountry/market: ${artist.region}` : ""}${artist.notes ? `\nAbout: ${artist.notes}` : ""}
 Aliases: ${list(artist.aliases)}
 Own TikTok accounts: ${list(artist.handles.map((h) => "@" + h.replace(/^@/, "")))}
 Songs: ${list(artist.song_titles)}
@@ -43,7 +43,7 @@ Collaborators: ${list(artist.collaborators)}
 Known false positives / negative terms: ${list(artist.negative_terms)}
 
 content_type:
-- own_post: posted by the artist's own account
+- own_post: ONLY when the author is one of the artist's own accounts listed above. Posts by collaborators, venues, media or fans are never own_post
 - live_concert: concert / festival / live performance footage
 - fan_edit: fan-made edit, compilation, cover or tribute
 - interview: interview, podcast, talk show, backstage talk
@@ -108,10 +108,17 @@ export async function classifyWithLlm(artist: Artist, video: LlmInput, examples:
     parsed = LlmVerdictSchema.parse(JSON.parse(response.text ?? ""));
   }
 
+  // Guard: own_post is reserved for the artist's own accounts (the rules layer handles those).
+  const own = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
+  const contentType =
+    parsed.content_type === "own_post" && !own.includes((video.author_handle ?? "").toLowerCase())
+      ? null
+      : parsed.content_type;
+
   return {
     is_about_artist: parsed.is_about_artist,
     confidence: Math.min(1, Math.max(0, parsed.confidence)),
-    content_type: parsed.content_type,
+    content_type: contentType,
     usability: Math.min(5, Math.max(1, Math.round(parsed.usability))),
     reason: parsed.reason,
     model: provider.model,

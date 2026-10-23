@@ -16,11 +16,14 @@ Het schema staat in `supabase/migrations/0001_init.sql` (tabellen, de view `vide
 
 ## Hoe het werkt
 
+De focus ligt op content van **andere accounts** over de artiest. Eigen posts worden wel opgehaald (voor sound-discovery), maar staan standaard verborgen in het dashboard.
+
 **Ingest** (`src/lib/ingest.ts`, knop "Ingest + classificeer"):
-1. `/v1/tiktok/search` voor naam + aliassen en "songtitel + naam"
+1. `/v1/tiktok/search` voor naam + aliassen en "songtitel + naam" (met `region` van de artist card, bv. `NL`)
 2. `/v1/tiktok/search/hashtags` per hashtag (leeg = afgeleid van naam/aliassen)
 3. `/v1/tiktok/profiles/{handle}/videos` voor de eigen accounts
-4. `/v1/tiktok/music/{clipId}/videos` per sound id
+4. **Sound-discovery:** de sounds van de artiest zelf (releases waarvan de artiest als auteur staat, en zijn eigen "original sound"s) worden uit de eigen posts gehaald en aan `sound_ids` toegevoegd
+5. `/v1/tiktok/music/{clipId}/videos` per sound id: alle andere accounts die zijn nummers gebruiken
 
 Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI). Daarna wordt er ontdubbeld op video-id, worden de bronnen gemerged en de thumbnails direct naar Storage gecachet. Credits en statistieken worden per run gelogd in `ingest_runs`.
 
@@ -30,7 +33,15 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - **Routing:** relevance ≥ 0.85 → relevant, ≤ 0.3 → unrelated, daartussen → review.
 - **Een laag toevoegen:** voeg een stap toe in `classifyArtist`, plus de waarde in de check-constraint `layer` en in de prioriteit van de view.
 
-**Dashboard:** grid met filters op status, content_type, periode en sortering. Klikken speelt de video af via de TikTok-embed; duim omhoog/omlaag slaat een human-classificatie op. "Download" roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
+**Dashboard:** grid met filters op status, content_type, periode en sortering. De standaardweergave is "alles over de artiest": geen eigen posts en geen `sound_only` (video's waarin zijn nummer alleen als achtergrond dient). Beide kun je aanzetten. Klikken speelt de video af via de TikTok-embed; duim omhoog/omlaag slaat een human-classificatie op. "Download" roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
+
+## Onderhoud
+
+TikTok levert veel covers als HEIC aan, en die tonen browsers niet. Bij het cachen worden ze naar JPEG omgezet. Om oude thumbnails om te zetten of opnieuw op te halen:
+
+```bash
+NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env.local scripts/backfill-thumbnails.ts
+```
 
 ## Niet in v1
 Gezichtsherkenning, videoanalyse met Gemini, scheduling en transcripts (het veld bestaat al in de LLM-input).

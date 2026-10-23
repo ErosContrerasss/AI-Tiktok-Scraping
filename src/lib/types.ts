@@ -26,6 +26,8 @@ export type Artist = {
   collaborators: string[];
   negative_terms: string[];
   blocked_accounts: string[];
+  notes: string;
+  region: string | null;
   created_at: string;
 };
 

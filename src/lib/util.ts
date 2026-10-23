@@ -36,3 +36,11 @@ export function chunks<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+// Case-insensitive whole-word match (unicode-aware), e.g. "russo" in "Samuel Welten & Russo".
+export function containsTerm(haystack: string, term: string): boolean {
+  const t = term.toLowerCase().trim();
+  if (!t) return false;
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "u").test(haystack.toLowerCase());
+}

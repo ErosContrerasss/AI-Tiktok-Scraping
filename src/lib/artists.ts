@@ -21,6 +21,11 @@ export const ArtistInput = z.object({
   collaborators: list,
   negative_terms: list,
   blocked_accounts: list,
+  notes: z.string().optional().transform((v) => (v ?? "").trim()),
+  region: z
+    .string()
+    .optional()
+    .transform((v) => (v?.trim() ? v.trim().toUpperCase() : null)),
 }) satisfies z.ZodType<Omit<Artist, "id" | "created_at">>;
 
 // Handles/accounts are stored lower-case without @, hashtags without #.

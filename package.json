@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^1.1.0",
     "@google/genai": "^2.31.0",
     "@supabase/supabase-js": "^2.118.0",
+    "heic-convert": "^2.1.0",
     "next": "15.5.28",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/heic-convert": "^2.1.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

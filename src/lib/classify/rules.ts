@@ -1,4 +1,5 @@
 import type { Artist, VideoRow, Verdict } from "../types";
+import { containsTerm } from "../util";
 
 // Layer 0: deterministic rules. Returns a decisive verdict (stored) or hints for the LLM.
 
@@ -6,14 +7,10 @@ export type RulesResult = { verdict: Verdict | null; hints: string[] };
 
 const norm = (s: string) => s.toLowerCase().replace(/^[@#]/, "").trim();
 
-function containsTerm(haystack: string, term: string): boolean {
-  const t = term.toLowerCase().trim();
-  if (!t) return false;
-  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "u").test(haystack);
-}
-
-export function applyRules(artist: Artist, v: Pick<VideoRow, "author_handle" | "caption" | "hashtags" | "sound_id" | "sound_title">): RulesResult {
+export function applyRules(
+  artist: Artist,
+  v: Pick<VideoRow, "author_handle" | "caption" | "hashtags" | "sound_id" | "sound_title" | "sound_author">,
+): RulesResult {
   const author = norm(v.author_handle ?? "");
   const haystack = [v.caption ?? "", ...v.hashtags.map((h) => `#${h}`), v.sound_title ?? ""].join(" ").toLowerCase();
 
@@ -39,6 +36,9 @@ export function applyRules(artist: Artist, v: Pick<VideoRow, "author_handle" | "
   for (const h of artist.handles) if (haystack.includes(`@${norm(h)}`)) hints.push(`caption tags @${norm(h)}`);
   for (const s of artist.song_titles) if (containsTerm(haystack, s)) hints.push(`mentions song "${s}"`);
   for (const c of artist.collaborators) if (containsTerm(haystack, c)) hints.push(`mentions collaborator "${c}"`);
+  // Weak signal only: other artists can share the name.
+  if ([artist.name, ...artist.aliases].some((n) => containsTerm(v.sound_author ?? "", n)))
+    hints.push(`sound credited to "${v.sound_author}" (could be a namesake)`);
   return { verdict: null, hints };
 }
 

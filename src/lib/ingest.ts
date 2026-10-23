@@ -2,8 +2,9 @@ import "server-only";
 import { config } from "./env";
 import { normalizeVideo, type NormalizedVideo } from "./normalize";
 import { socialFetch, type SfListResponse } from "./socialfetch";
-import { db, THUMB_BUCKET } from "./supabase";
-import { chunks, mapLimit, uniq } from "./util";
+import { db } from "./supabase";
+import { cacheThumbnail } from "./thumbnails";
+import { chunks, containsTerm, mapLimit, uniq } from "./util";
 import type { Artist, Source, SourceType } from "./types";
 
 type Task = { type: SourceType; query: string; fetchPage: (cursor?: string) => Promise<SfListResponse> };
@@ -26,10 +27,14 @@ export type IngestStats = {
   newVideos: number;
   existingVideos: number;
   perSource: Record<SourceType, { found: number; unique: number }>;
+  ownVsOther: { own: number; other: number }; // unique videos from the artist's accounts vs everyone else
+  discoveredSounds: { id: string; title: string | null }[];
   thumbnails: { cached: number; failed: number };
   credits: number;
 };
 
+// Phase 1: search, hashtags and own profiles. Phase 2 (sounds) runs after we
+// discovered the artist's sounds from their own posts.
 export function buildTasks(artist: Artist): Task[] {
   const names = uniq([artist.name, ...artist.aliases]);
   // Song titles alone are too generic ("Ik Wil"), so pair them with the artist name.
@@ -42,7 +47,7 @@ export function buildTasks(artist: Artist): Task[] {
     ...searchQueries.map((q) => ({
       type: "search" as const,
       query: q,
-      fetchPage: (c?: string) => socialFetch.searchVideos(q, c),
+      fetchPage: (c?: string) => socialFetch.searchVideos(q, c, artist.region ?? undefined),
     })),
     ...hashtags.map((h) => ({
       type: "hashtag" as const,
@@ -54,12 +59,42 @@ export function buildTasks(artist: Artist): Task[] {
       query: h,
       fetchPage: (c?: string) => socialFetch.profileVideos(h, c),
     })),
-    ...uniq(artist.sound_ids).map((id) => ({
-      type: "sound" as const,
-      query: id,
-      fetchPage: (c?: string) => socialFetch.musicVideos(id, c),
-    })),
   ];
+}
+
+function soundTasks(soundIds: string[]): Task[] {
+  return uniq(soundIds).map((id) => ({
+    type: "sound" as const,
+    query: id,
+    fetchPage: (c?: string) => socialFetch.musicVideos(id, c),
+  }));
+}
+
+const MAX_DISCOVERED_SOUNDS = 15;
+
+// Sounds used on the artist's own posts that belong to the artist: their releases
+// ("BOEM! — Samuel Welten & Russo") or their original sounds ("original sound - russo_nl").
+// Other people using these sounds is the richest source of third-party content.
+export function discoverSounds(artist: Artist, videos: NormalizedVideo[]): { id: string; title: string | null }[] {
+  const handles = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
+  const names = [artist.name, ...artist.aliases].map((n) => n.toLowerCase());
+  const byViews = new Map<string, { id: string; title: string | null; views: number }>();
+  for (const v of videos) {
+    if (!v.sound_id || !v.author_handle || !handles.includes(v.author_handle)) continue;
+    const author = (v.sound_author ?? "").toLowerCase();
+    const title = (v.sound_title ?? "").toLowerCase();
+    const isArtistSound =
+      names.some((n) => containsTerm(author, n)) ||
+      handles.some((h) => title.endsWith(`- ${h}`));
+    if (!isArtistSound) continue;
+    const prev = byViews.get(v.sound_id);
+    byViews.set(v.sound_id, { id: v.sound_id, title: v.sound_title, views: (prev?.views ?? 0) + (v.views ?? 0) });
+  }
+  return [...byViews.values()]
+    .filter((s) => !artist.sound_ids.includes(s.id))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, MAX_DISCOVERED_SOUNDS)
+    .map(({ id, title }) => ({ id, title }));
 }
 
 export async function ingestArtist(artistId: string, opts: { maxPages?: number } = {}): Promise<IngestStats> {
@@ -85,8 +120,7 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
   };
   const perSourceFound: Record<SourceType, number> = { search: 0, hashtag: 0, profile: 0, sound: 0 };
 
-  const tasks = buildTasks(artist);
-  const taskStats = await mapLimit(tasks, 4, async (task): Promise<TaskStat> => {
+  const runTask = async (task: Task): Promise<TaskStat> => {
     const stat: TaskStat = { type: task.type, query: task.query, pages: 0, found: 0, credits: 0 };
     let cursor: string | undefined;
     try {
@@ -115,7 +149,18 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
       stat.error = e instanceof Error ? e.message : String(e);
     }
     return stat;
-  });
+  };
+
+  const taskStats = await mapLimit(buildTasks(artist), 4, runTask);
+
+  // Remember discovered sounds on the artist card: the sound rule then marks
+  // every video using them as relevant, and the next run fetches them directly.
+  const discoveredSounds = discoverSounds(artist, [...found.values()].map((f) => f.video));
+  if (discoveredSounds.length) {
+    artist.sound_ids = [...artist.sound_ids, ...discoveredSounds.map((s) => s.id)];
+    await supabase.from("artists").update({ sound_ids: artist.sound_ids }).eq("id", artistId);
+  }
+  taskStats.push(...(await mapLimit(soundTasks(artist.sound_ids), 4, runTask)));
 
   // Merge with what's already stored: keep the original artist, first_seen_at and sources.
   const ids = [...found.keys()];
@@ -158,6 +203,7 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
     if (upsertError) throw new Error(`Upsert videos failed: ${upsertError.message}`);
   }
 
+  const ownHandles = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
   const stats: IngestStats = {
     runId,
     maxPages,
@@ -172,6 +218,11 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
         { found: perSourceFound[t], unique: perSourceIds[t].size },
       ]),
     ) as IngestStats["perSource"],
+    ownVsOther: {
+      own: rows.filter((r) => ownHandles.includes(r.author_handle ?? "")).length,
+      other: rows.filter((r) => !ownHandles.includes(r.author_handle ?? "")).length,
+    },
+    discoveredSounds,
     thumbnails: { cached: cachedPaths.size, failed: thumbFailed },
     credits: taskStats.reduce((n, t) => n + t.credits, 0),
   };
@@ -182,20 +233,4 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
     .eq("id", runId);
 
   return stats;
-}
-
-async function cacheThumbnail(artistId: string, videoId: string, url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const ext = contentType.includes("webp") ? "webp" : contentType.includes("png") ? "png" : "jpg";
-    const path = `${artistId}/${videoId}.${ext}`;
-    const { error } = await db()
-      .storage.from(THUMB_BUCKET)
-      .upload(path, await res.arrayBuffer(), { contentType, upsert: true });
-    return error ? null : path;
-  } catch {
-    return null;
-  }
 }

@@ -18,6 +18,8 @@ const FIELDS: { key: keyof Artist; label: string; hint: string }[] = [
 export function ArtistForm({ artist }: { artist?: Artist }) {
   const router = useRouter();
   const [name, setName] = useState(artist?.name ?? "");
+  const [notes, setNotes] = useState(artist?.notes ?? "");
+  const [region, setRegion] = useState(artist?.region ?? "");
   const [values, setValues] = useState<Record<string, string>>(
     Object.fromEntries(FIELDS.map((f) => [f.key, ((artist?.[f.key] as string[]) ?? []).join("\n")])),
   );
@@ -31,7 +33,7 @@ export function ArtistForm({ artist }: { artist?: Artist }) {
     const res = await fetch(artist ? `/api/artists/${artist.id}` : "/api/artists", {
       method: artist ? "PUT" : "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, ...values }),
+      body: JSON.stringify({ name, notes, region, ...values }),
     });
     const body = await res.json();
     setSaving(false);
@@ -44,12 +46,36 @@ export function ArtistForm({ artist }: { artist?: Artist }) {
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4">
+      <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
+        <label className="block">
+          <span className="text-sm font-medium">Naam</span>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium">Regio</span>
+          <input
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            placeholder="NL"
+            maxLength={2}
+            className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm uppercase"
+          />
+        </label>
+      </div>
       <label className="block">
-        <span className="text-sm font-medium">Naam</span>
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+        <span className="text-sm font-medium">Over de artiest</span>
+        <span className="block text-xs text-zinc-500">
+          Context voor de AI: genre, stad, bekende shows/samenwerkingen, en met wie hij NIET verward moet worden
+        </span>
+        <textarea
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
           className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
         />
       </label>

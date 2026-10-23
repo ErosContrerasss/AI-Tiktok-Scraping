@@ -114,6 +114,16 @@ function IngestSummary({ s }: { s: IngestStats }) {
           ))}
         </tbody>
       </table>
+      {s.ownVsOther && (
+        <p className="mt-1 text-xs text-zinc-600">
+          {s.ownVsOther.other} van andere accounts · {s.ownVsOther.own} van eigen account(s)
+        </p>
+      )}
+      {s.discoveredSounds?.length > 0 && (
+        <p className="mt-1 text-xs text-zinc-600">
+          Nieuwe sounds ontdekt via eigen posts: {s.discoveredSounds.map((d) => d.title ?? d.id).join(", ")}
+        </p>
+      )}
       <p className="mt-1 text-xs text-zinc-500">
         Thumbnails gecached: {s.thumbnails.cached}
         {s.thumbnails.failed ? `, mislukt: ${s.thumbnails.failed}` : ""}
@@ -145,6 +155,12 @@ function ClassifySummary({ s }: { s: ClassifyStats }) {
         <span className="text-zinc-500">{s.distribution.unrelated} unrelated</span>
         {s.distribution.unclassified ? ` · ${s.distribution.unclassified} ongeclassificeerd` : ""}
       </p>
+      {s.distributionOther && (
+        <p className="mt-1 text-xs text-zinc-600">
+          Andere accounts: {s.distributionOther.relevant} relevant · {s.distributionOther.review} review ·{" "}
+          {s.distributionOther.unrelated} unrelated
+        </p>
+      )}
       <p className="mt-1 text-xs text-zinc-500">
         {Object.entries(s.byContentType)
           .sort((a, b) => b[1] - a[1])

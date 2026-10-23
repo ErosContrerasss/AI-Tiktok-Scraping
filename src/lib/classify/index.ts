@@ -16,6 +16,7 @@ export type ClassifyStats = {
   rules: { relevant: number; unrelated: number };
   llm: { classified: number; failed: number; errors: string[] };
   distribution: Record<Status, number>;
+  distributionOther: Record<Status, number>; // excluding the artist's own accounts
   byContentType: Record<string, number>;
 };
 
@@ -57,6 +58,7 @@ export async function classifyArtist(
     rules: { relevant: 0, unrelated: 0 },
     llm: { classified: 0, failed: 0, errors: [] },
     distribution: { relevant: 0, review: 0, unrelated: 0, unclassified: 0 },
+    distributionOther: { relevant: 0, review: 0, unrelated: 0, unclassified: 0 },
     byContentType: {},
   };
 
@@ -92,9 +94,14 @@ export async function classifyArtist(
     });
   }
 
-  const statuses = await selectAll<{ status: Status; content_type: ContentType | null }>("video_status", "status, content_type", artistId);
+  const statuses = await selectAll<{ status: Status; content_type: ContentType | null; author_handle: string | null }>(
+    "video_status",
+    "status, content_type, author_handle",
+    artistId,
+  );
   for (const s of statuses) {
     stats.distribution[s.status]++;
+    if (!artist.handles.includes(s.author_handle ?? "")) stats.distributionOther[s.status]++;
     if (s.status !== "unrelated" && s.content_type)
       stats.byContentType[s.content_type] = (stats.byContentType[s.content_type] ?? 0) + 1;
   }

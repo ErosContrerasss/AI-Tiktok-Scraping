@@ -20,7 +20,7 @@ const SORTS = {
   relevance: { column: "relevance", label: "Confidence" },
 } as const;
 
-type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string };
+type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string; own?: string };
 
 export default async function ArtistPage({
   params,
@@ -37,22 +37,42 @@ export default async function ArtistPage({
   const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as Status) : "relevant";
   const sortKey = (sp.sort && sp.sort in SORTS ? sp.sort : "views") as keyof typeof SORTS;
   const page = Math.max(1, Number(sp.page ?? 1));
+  // Default focus: content from other accounts. Own posts only on request.
+  const includeOwn = sp.own === "1";
+  const ownList = artist.handles.length ? `(${artist.handles.map((h) => `"${h}"`).join(",")})` : null;
+  // Default content type view: everything about the artist, i.e. without videos
+  // that merely use their song as background ("sound_only"). "all" shows those too.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase builder generics differ per select()
+  const applyFilters = (q: any) => {
+    if (!includeOwn && ownList) q = q.not("author_handle", "in", ownList);
+    if (!sp.type) q = q.or("content_type.is.null,content_type.neq.sound_only");
+    else if (sp.type !== "all") q = q.eq("content_type", sp.type);
+    if (sp.from) q = q.gte("posted_at", sp.from);
+    if (sp.to) q = q.lte("posted_at", `${sp.to}T23:59:59Z`);
+    return q;
+  };
 
   const supabase = db();
-  let query = supabase
+  const query = applyFilters(
+    supabase
     .from("video_status")
     .select("*", { count: "exact" })
     .eq("artist_id", id)
     .eq("status", status)
     .order(SORTS[sortKey].column, { ascending: false, nullsFirst: false })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  if (sp.type) query = query.eq("content_type", sp.type);
-  if (sp.from) query = query.gte("posted_at", sp.from);
-  if (sp.to) query = query.lte("posted_at", `${sp.to}T23:59:59Z`);
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+  );
 
   const [{ data: rows, count }, counts, { data: lastRun }] = await Promise.all([
     query,
-    statusCounts(id),
+    Promise.all(
+      STATUSES.map(async (st) => {
+        const { count: n } = await applyFilters(
+          supabase.from("video_status").select("id", { count: "exact", head: true }).eq("artist_id", id).eq("status", st),
+        );
+        return [st, n ?? 0] as const;
+      }),
+    ).then((entries) => Object.fromEntries(entries) as Record<Status, number>),
     supabase.from("ingest_runs").select("stats").eq("artist_id", id).not("finished_at", "is", null)
       .order("started_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
@@ -109,7 +129,8 @@ export default async function ArtistPage({
         <label className="flex flex-col">
           <span className="text-xs text-zinc-500">content type</span>
           <select name="type" defaultValue={sp.type ?? ""} className="rounded-md border border-zinc-300 bg-white px-2 py-1">
-            <option value="">alle</option>
+            <option value="">alles over de artiest (zonder sound_only)</option>
+            <option value="all">alle, incl. sound_only</option>
             {CONTENT_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
@@ -133,6 +154,10 @@ export default async function ArtistPage({
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1.5 self-center">
+          <input type="checkbox" name="own" value="1" defaultChecked={includeOwn} />
+          ook eigen posts
+        </label>
         <button className="rounded-md border border-zinc-300 bg-white px-3 py-1">Filter</button>
         <span className="text-zinc-500">{count ?? 0} video&apos;s</span>
       </form>
@@ -150,18 +175,4 @@ export default async function ArtistPage({
       )}
     </div>
   );
-}
-
-async function statusCounts(artistId: string): Promise<Record<Status, number>> {
-  const entries = await Promise.all(
-    STATUSES.map(async (s) => {
-      const { count } = await db()
-        .from("video_status")
-        .select("id", { count: "exact", head: true })
-        .eq("artist_id", artistId)
-        .eq("status", s);
-      return [s, count ?? 0] as const;
-    }),
-  );
-  return Object.fromEntries(entries) as Record<Status, number>;
 }
