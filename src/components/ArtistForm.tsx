@@ -6,7 +6,7 @@ import type { Artist } from "@/lib/types";
 
 const FIELDS: { key: keyof Artist; label: string; hint: string }[] = [
   { key: "aliases", label: "Aliassen", hint: "Andere schrijfwijzen of namen, één per regel" },
-  { key: "handles", label: "Eigen TikTok-accounts", hint: "Zonder @, bv. russo" },
+  { key: "handles", label: "Eigen TikTok-accounts", hint: "Zonder @; posts hiervan komen onder 'own'" },
   { key: "hashtags", label: "Hashtags", hint: "Zonder #. Leeg = afgeleid van naam + aliassen" },
   { key: "song_titles", label: "Songtitels", hint: "Gezocht als \"titel + artiestnaam\"" },
   { key: "sound_ids", label: "Sound IDs", hint: "TikTok music clip id's (uit tiktok.com/music/…-ID)" },
@@ -14,16 +14,18 @@ const FIELDS: { key: keyof Artist; label: string; hint: string }[] = [
   { key: "negative_terms", label: "Negatieve termen", hint: "Bevat de video dit → unrelated" },
   { key: "blocked_accounts", label: "Geblokkeerde accounts", hint: "Zonder @, altijd unrelated" },
   { key: "fan_accounts", label: "Fanaccounts", hint: "Accounts die veel footage posten; hele profiel wordt opgehaald" },
-  { key: "extra_queries", label: "Extra zoekopdrachten", hint: "Volledige zoektermen, bv. \"russo afas\" of \"russo zwarte cross\"" },
+  { key: "extra_queries", label: "Extra zoekopdrachten", hint: "Volledige zoektermen, bv. \"<naam> afas\" of \"<naam> zwarte cross\"" },
 ];
 
-export function ArtistForm({ artist }: { artist?: Artist }) {
+// `artist` = edit an existing artist; `initial` = prefill a new one (e.g. a proposed card).
+export function ArtistForm({ artist, initial }: { artist?: Artist; initial?: Partial<Artist> }) {
   const router = useRouter();
-  const [name, setName] = useState(artist?.name ?? "");
-  const [notes, setNotes] = useState(artist?.notes ?? "");
-  const [region, setRegion] = useState(artist?.region ?? "");
+  const start = artist ?? initial;
+  const [name, setName] = useState(start?.name ?? "");
+  const [notes, setNotes] = useState(start?.notes ?? "");
+  const [region, setRegion] = useState(start?.region ?? "");
   const [values, setValues] = useState<Record<string, string>>(
-    Object.fromEntries(FIELDS.map((f) => [f.key, ((artist?.[f.key] as string[]) ?? []).join("\n")])),
+    Object.fromEntries(FIELDS.map((f) => [f.key, ((start?.[f.key] as string[]) ?? []).join("\n")])),
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

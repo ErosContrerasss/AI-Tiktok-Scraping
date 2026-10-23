@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Keep the binary path of ffmpeg-static intact (bundling would rewrite it).
+  serverExternalPackages: ["ffmpeg-static"],
 };
 
 export default nextConfig;

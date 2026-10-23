@@ -1,11 +1,10 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { GoogleGenAI } from "@google/genai";
 import { z } from "zod";
-import { config, env } from "../env";
+import { generateStructured } from "../llm-client";
 import { CONTENT_TYPES, type Artist, type VideoRow, type Verdict } from "../types";
 import { truncate } from "../util";
+
+export { llmProvider } from "../llm-client";
 
 // Layer 1: LLM on text metadata (caption, hashtags, author, sound, optional transcript).
 
@@ -26,11 +25,6 @@ export type LlmInput = Pick<VideoRow, "author_handle" | "caption" | "hashtags" |
 
 export type FewShot = LlmInput & { is_about_artist: boolean };
 
-export function llmProvider(): { name: "anthropic" | "gemini"; model: string } | null {
-  if (env.anthropicKey()) return { name: "anthropic", model: config.anthropicModel };
-  if (env.geminiKey()) return { name: "gemini", model: config.geminiModel };
-  return null;
-}
 
 function systemPrompt(artist: Artist, examples: FewShot[]): string {
   const list = (xs: string[]) => (xs.length ? xs.join(", ") : "(none)");
@@ -90,40 +84,22 @@ function describe(v: LlmInput): string {
   return lines.join("\n");
 }
 
-let anthropic: Anthropic | null = null;
-let gemini: GoogleGenAI | null = null;
 
-export async function classifyWithLlm(artist: Artist, video: LlmInput, examples: FewShot[]): Promise<Verdict & { model: string }> {
-  const provider = llmProvider();
-  if (!provider) throw new Error("Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env.local");
-  const system = systemPrompt(artist, examples);
+const FRAMES_INSTRUCTION = `You also get frames sampled from the video (in order). Use them to judge what kind of footage it is and how usable it is: a stage performance, crowd filming a show, an interview or podcast setup, a meet & greet, versus someone dancing or lip-syncing to a song, a lyric/text screen, a still image or unrelated content.
+The artist is the one on the ARTIST CARD. If caption, hashtags or on-screen text show the video is about a different person or act (another artist, a namesake, a collaborator on their own), on_screen_probability must be near 0, however good the footage is. A collaborator's own post only counts when the artist is in it too. Never assume the author is the artist's own account unless the handle is listed as such.
+Do NOT try to recognise who a person is from their face. Who it is follows from the metadata; the frames tell you whether the video actually shows that kind of footage, so let them raise or lower on_screen_probability accordingly. Base usability on what you see (sharpness, light, distance, how prominently the performer is visible).`;
+
+// Layer 1 (text only) and layer 2 "vision" (same question, plus video frames).
+export async function classifyWithLlm(
+  artist: Artist,
+  video: LlmInput,
+  examples: FewShot[],
+  frames: Buffer[] = [],
+): Promise<Verdict & { model: string }> {
+  const system = systemPrompt(artist, examples) + (frames.length ? `\n\n${FRAMES_INSTRUCTION}` : "");
   const user = `Classify this video:\n${describe(video)}`;
 
-  let parsed: z.infer<typeof LlmVerdictSchema>;
-  if (provider.name === "anthropic") {
-    anthropic ??= new Anthropic({ apiKey: env.anthropicKey() });
-    const response = await anthropic.messages.parse({
-      model: provider.model,
-      max_tokens: 1024,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: { effort: "low", format: zodOutputFormat(LlmVerdictSchema) },
-    });
-    if (!response.parsed_output) throw new Error(`No structured output (stop_reason: ${response.stop_reason})`);
-    parsed = response.parsed_output;
-  } else {
-    gemini ??= new GoogleGenAI({ apiKey: env.geminiKey() });
-    const response = await gemini.models.generateContent({
-      model: provider.model,
-      contents: user,
-      config: {
-        systemInstruction: system,
-        responseMimeType: "application/json",
-        responseJsonSchema: z.toJSONSchema(LlmVerdictSchema),
-      },
-    });
-    parsed = LlmVerdictSchema.parse(JSON.parse(response.text ?? ""));
-  }
+  const { data: parsed, model } = await generateStructured(LlmVerdictSchema, { system, text: user, images: frames });
 
   // Guard: own_post is reserved for the artist's own accounts (the rules layer handles those).
   const own = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
@@ -142,6 +118,6 @@ export async function classifyWithLlm(artist: Artist, video: LlmInput, examples:
     content_type: contentType,
     usability: Math.min(5, Math.max(1, Math.round(parsed.usability))),
     reason: parsed.reason,
-    model: provider.model,
+    model,
   };
 }

@@ -43,6 +43,18 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - afspelen via de TikTok-embed, duim omhoog/omlaag als human-classificatie;
 - "Download": roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
 
+## Nieuwe artiest
+
+Plak een TikTok-link bij "Nieuwe artiest" → "Card voorstellen" (`src/lib/bootstrap.ts`, ±5 credits). De tool haalt profiel, eigen posts en één zoekpagina op, en de AI vult naam, aliassen, regio, notitie, songs, collaborators, hashtags, negatieve termen en geblokkeerde accounts in. Controleer de card vóór het opslaan.
+
+## Classifiers
+
+- **Jev (TypeSafe, aanbevolen):** zet `TYPESAFE_API_KEY`. Jev geeft getypeerde, gekalibreerde kansen (Noul/Choice/Score) voor $0,042 per miljoen input-tokens, in ±0,1–0,4 seconde.
+  - **Frames-first (laag `vision`):** per video 12 frames (`FRAME_COUNT`) uit de mp4 van TikTok's CDN, vergeleken met **referentiefoto's** van de artiest. Per frame volgt "staat deze persoon erin?" (met tijdstip), plus een eindoordeel waarbij de caption alleen als tweede bewijs telt. Merch, foto's of schermen van de artiest tellen niet. Drempel voor relevant: 0,7.
+  - **Referentiefoto's** (`src/lib/references.ts`) worden automatisch gekozen uit de profielfoto en de covers van eigen posts. Je beheert ze op de artiestpagina.
+- **LLM:** Claude Haiku of Gemini met een Zod-schema (`CLASSIFIER=llm`). Valt automatisch terug op Gemini als Anthropic geen tegoed heeft.
+- **Evaluatie:** `scripts/compare-classifiers.ts` en `scripts/compare-frames.ts` vergelijken varianten op een steekproef en bewaren frames voor handmatige controle.
+
 ## Onderhoud
 
 TikTok levert veel covers als HEIC aan, en die tonen browsers niet. Bij het cachen worden ze naar JPEG omgezet. Om oude thumbnails om te zetten of opnieuw op te halen:

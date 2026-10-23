@@ -28,6 +28,7 @@ export type Artist = {
   blocked_accounts: string[];
   fan_accounts: string[];
   extra_queries: string[];
+  reference_images: string[]; // storage paths in the "references" bucket
   notes: string;
   region: string | null;
   created_at: string;
@@ -56,7 +57,7 @@ export type VideoRow = {
 };
 
 export type VideoStatusRow = VideoRow & {
-  layer: "rules" | "llm" | "human" | null;
+  layer: "rules" | "llm" | "vision" | "human" | null;
   is_about_artist: boolean | null;
   confidence: number | null;
   content_type: ContentType | null;

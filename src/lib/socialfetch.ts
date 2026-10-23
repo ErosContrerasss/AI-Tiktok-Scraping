@@ -74,4 +74,6 @@ export const socialFetch = {
   musicVideos: (clipId: string, cursor?: string) =>
     get<SfListResponse>(`/v1/tiktok/music/${encodeURIComponent(clipId)}/videos`, { cursor }),
   download: (url: string) => get<SfDownloadResponse>("/v1/tiktok/videos/download", { url }),
+  // Same response shape as download, without hosted copies (1 credit). Used to refresh expired CDN links.
+  getVideo: (url: string) => get<SfDownloadResponse>("/v1/tiktok/videos", { url }),
 };

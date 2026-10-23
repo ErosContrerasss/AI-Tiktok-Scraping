@@ -82,6 +82,7 @@ function VideoCard({ v, onPlay }: { v: GridVideo; onPlay: () => void }) {
         <div className="truncate text-zinc-500" title={v.sources.map((s) => `${s.type}: ${s.query}`).join("\n")}>
           {[...new Set(v.sources.map((s) => s.type))].join(", ")}
           {v.usability ? ` · bruikbaar ${v.usability}/5` : ""}
+          {v.layer === "vision" ? " · 👁 frames gecheckt" : ""}
         </div>
         <p className="line-clamp-2 text-zinc-500" title={`${v.caption ?? ""}\n\n${v.layer ?? ""}: ${v.reason ?? ""}`}>
           {v.caption}

@@ -33,16 +33,17 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
     const stats = await call<IngestStats>(`/api/artists/${artistId}/ingest`, { maxPages, includeOwnProfile, includeSounds });
     if (stats) {
       setIngest(stats);
-      await runClassify(false);
+      // Frames right away: TikTok's video links are still fresh (free) just after ingest.
+      await runClassify(false, true);
     }
     setBusy(null);
     router.refresh();
   }
 
-  async function runClassify(force: boolean) {
+  async function runClassify(force: boolean, vision = false) {
     setError(null);
-    setBusy("Classificeren…");
-    const stats = await call<ClassifyStats>(`/api/artists/${artistId}/classify`, { force });
+    setBusy(vision ? "Visuele check: frames bekijken…" : "Classificeren…");
+    const stats = await call<ClassifyStats>(`/api/artists/${artistId}/classify`, { force, vision });
     if (stats) setClassify(stats);
     setBusy(null);
     router.refresh();
@@ -83,6 +84,14 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50"
         >
           Herclassificeer alles
+        </button>
+        <button
+          onClick={() => runClassify(false, true)}
+          disabled={!!busy}
+          title="Met Jev + referentiefoto's: 12 frames per video, alle video's van andere accounts die nog niet gecheckt zijn (±$0,0005 per video). Zonder: 4 frames voor relevant + review. Verlopen TikTok-links kosten 1 credit om te verversen."
+          className="rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50"
+        >
+          Frames-check (nieuwe video&apos;s)
         </button>
         {!llmReady && <span className="text-xs text-amber-700">Geen LLM-key: alleen regels draaien</span>}
         {busy && <span className="text-sm text-zinc-600">{busy}</span>}
@@ -158,6 +167,9 @@ function ClassifySummary({ s }: { s: ClassifyStats }) {
       <p className="text-zinc-600">
         Regels: {s.rules.unrelated} uitgesloten · LLM ({s.provider ?? "geen"}): {s.llm.classified} gedaan
         {s.llm.failed ? `, ${s.llm.failed} mislukt` : ""}
+        {s.vision.checked || s.vision.failed
+          ? ` · Frames (${s.vision.mode ?? "?"}): ${s.vision.checked} gecheckt${s.vision.failed ? `, ${s.vision.failed} mislukt` : ""} (${s.vision.credits} credits)`
+          : ""}
       </p>
       <p className="mt-1">
         <span className="text-green-700">{s.distribution.relevant} footage (relevant)</span> ·{" "}

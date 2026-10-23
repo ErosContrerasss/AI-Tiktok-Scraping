@@ -28,10 +28,10 @@ export const ArtistInput = z.object({
     .string()
     .optional()
     .transform((v) => (v?.trim() ? v.trim().toUpperCase() : null)),
-}) satisfies z.ZodType<Omit<Artist, "id" | "created_at">>;
+}) satisfies z.ZodType<Omit<Artist, "id" | "created_at" | "reference_images">>;
 
 // Handles/accounts are stored lower-case without @, hashtags without #.
-function clean(input: Omit<Artist, "id" | "created_at">) {
+function clean(input: Omit<Artist, "id" | "created_at" | "reference_images">) {
   const strip = (xs: string[], prefix: string) => xs.map((x) => x.replace(new RegExp(`^${prefix}`), "").toLowerCase());
   return {
     ...input,

@@ -12,6 +12,7 @@ export const env = {
   supabaseServiceKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
   anthropicKey: () => process.env.ANTHROPIC_API_KEY,
   geminiKey: () => process.env.GEMINI_API_KEY,
+  typesafeKey: () => process.env.TYPESAFE_API_KEY,
 };
 
 export const config = {
@@ -30,6 +31,10 @@ export const config = {
   relevantAt: 0.85,
   unrelatedAt: 0.3,
   llmConcurrency: Number(process.env.LLM_CONCURRENCY ?? 8),
+  // "jev" (TypeSafe, typed probabilities, cheapest) or "llm" (Claude/Gemini with structured output).
+  classifier: (process.env.CLASSIFIER ?? (process.env.TYPESAFE_API_KEY ? "jev" : "llm")) as "jev" | "llm",
   anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-haiku-5-5",
   geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite",
+  // Frames need a stronger model than text-only triage (Flash-Lite mixes up namesakes).
+  geminiVisionModel: process.env.GEMINI_VISION_MODEL ?? "gemini-2.5-flash",
 };

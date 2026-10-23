@@ -8,5 +8,8 @@ export const POST = handle(async (req, { params }: IdCtx) => {
   return classifyArtist((await params).id, {
     force: Boolean(body.force),
     limit: body.limit ? Number(body.limit) : undefined,
+    vision: Boolean(body.vision),
+    forceVision: Boolean(body.forceVision),
+    visionLimit: body.visionLimit ? Number(body.visionLimit) : undefined,
   });
 });

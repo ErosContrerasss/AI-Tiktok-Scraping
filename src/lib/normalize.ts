@@ -69,6 +69,8 @@ export function normalizeVideo(v: SfVideo): NormalizedVideo {
       url: v.url,
       isAd: v.isAd,
       stats: v.stats,
+      // TikTok CDN links expire after a few hours; used by the vision layer to grab frames.
+      media: { play: v.media?.downloadWithoutWatermarkUrl ?? v.media?.downloadUrl ?? null, seenAt: new Date().toISOString() },
       author: v.author ?? {
         uid: str(author.uid),
         unique_id: str(author.unique_id),
