@@ -25,9 +25,10 @@ const SORTS = {
   likes: { column: "likes", label: "Likes" },
   posted_at: { column: "posted_at", label: "Nieuwste" },
   relevance: { column: "relevance", label: "Confidence" },
+  clean_seconds: { column: "clean_seconds", label: "Meeste schone seconden" },
 } as const;
 
-type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string };
+type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string; clean?: string };
 
 export default async function ArtistPage({
   params,
@@ -42,7 +43,9 @@ export default async function ArtistPage({
   if (!artist) notFound();
 
   const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as Status) : "relevant";
-  const sortKey = (sp.sort && sp.sort in SORTS ? sp.sort : "views") as keyof typeof SORTS;
+  // "Schone fragmenten": usable videos with stretches of the artist on screen without overlaid text.
+  const clean = status === "relevant" && sp.clean === "1";
+  const sortKey = (sp.sort && sp.sort in SORTS && (clean || sp.sort !== "clean_seconds") ? sp.sort : "views") as keyof typeof SORTS;
   const page = Math.max(1, Number(sp.page ?? 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase builder generics differ per select()
   const applyFilters = (q: any) => {
@@ -55,7 +58,7 @@ export default async function ArtistPage({
   const supabase = db();
   const query = applyFilters(
     supabase
-    .from("video_status")
+    .from(clean ? "video_library" : "video_status")
     .select("*", { count: "exact" })
     .eq("artist_id", id)
     .eq("status", status)
@@ -86,9 +89,14 @@ export default async function ArtistPage({
     loadPlaybookView(id),
   ]);
 
+  const { data: segmentRows } = rows?.length
+    ? await supabase.from("video_segments").select("video_id, segments, clean_seconds, aspect, crop").in("video_id", (rows as { id: string }[]).map((r) => r.id))
+    : { data: [] };
+  const segmentsOf = new Map((segmentRows ?? []).map((s) => [s.video_id, s]));
   const videos: GridVideo[] = ((rows ?? []) as VideoStatusRow[]).map((v) => ({
     ...v,
     thumb: publicThumbUrl(v.thumbnail_cached_path) ?? v.thumbnail_url,
+    clean: segmentsOf.get(v.id) ?? null,
   }));
   const href = (patch: Partial<Search>) => {
     const next = new URLSearchParams(
@@ -167,6 +175,12 @@ export default async function ArtistPage({
             ))}
           </select>
         </label>
+        {status === "relevant" && (
+          <label className="flex items-center gap-1.5 self-center" title="Alleen video's met stukken waarin de artiest in beeld is zonder tekst of overlays (een klein watermerk in een hoek mag)">
+            <input type="checkbox" name="clean" value="1" defaultChecked={clean} />
+            alleen schone fragmenten
+          </label>
+        )}
         <button className="rounded-md border border-zinc-300 bg-white px-3 py-1">Filter</button>
         <span className="text-zinc-500">{count ?? 0} video&apos;s</span>
       </form>

@@ -22,7 +22,7 @@ export type ClassifyStats = {
   provider: string | null;
   rules: { unrelated: number };
   llm: { classified: number; failed: number; errors: string[] };
-  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[]; framesPruned?: number };
+  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[]; framesPruned?: number; withFragments?: number };
   distribution: Record<Status, number>;
   byContentType: Record<string, number>; // relevant videos only
 };
@@ -129,6 +129,9 @@ export async function classifyArtist(
   if (opts.vision && stats.provider) {
     const keep = new Set(statuses.filter((s) => s.status === "relevant" || s.status === "review").map((s) => s.id));
     stats.vision.framesPruned = await pruneFrames(artistId, keep);
+    // Clean fragments for new usable videos (dynamic import: segments.ts uses selectAll from here).
+    const { segmentArtist } = await import("../segments");
+    stats.vision.withFragments = (await segmentArtist(artistId)).withSegments;
   }
   for (const s of statuses) {
     stats.distribution[s.status]++;

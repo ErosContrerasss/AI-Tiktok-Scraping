@@ -74,7 +74,7 @@ function pickEvenly<T>(items: T[], count: number): T[] {
   return Array.from({ length: count }, (_, i) => items[Math.floor((i * items.length) / count)]);
 }
 
-async function loadStoredFrames(artistId: string, videoId: string): Promise<Frame[]> {
+export async function loadStoredFrames(artistId: string, videoId: string): Promise<Frame[]> {
   const folder = `${artistId}/${videoId}`;
   const names = await media().list(BUCKETS.frames, folder);
   if (!names.length) return [];

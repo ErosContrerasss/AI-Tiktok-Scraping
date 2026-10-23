@@ -50,6 +50,10 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - **Frames:** de frames-check bewaart frames in de privé-bucket `frames` (`{artist}/{video}/…`), zodat herclassificeren geen verlopen TikTok-links meer nodig heeft. Na de beoordeling worden frames van unrelated video's opgeruimd; alleen relevant en review blijven staan. Voor oudere runs: `scripts/prune-frames.ts <artistId>`.
 - **Opslag-interface:** alle media (thumbnails, frames, sheet-foto's, downloads) loopt via `src/lib/media.ts` (`media().put/get/list/remove/signedUrl`). Nu is dat Supabase Storage. Een S3-compatibele store zoals Cloudflare R2 (geen egress-kosten) is één extra klasse, gekozen met `MEDIA_STORE`.
 
+## Schone fragmenten
+
+Voor herdistributie: per bruikbare video de stukken waarin de artiest in beeld is, zonder tekst of overlays (een klein watermerk in een hoek mag) en zonder zwarte frames (`src/lib/segments.ts`, tabel `video_segments`). De stap gebruikt de resultaten per frame van de frames-check plus een pixelcheck van de opgeslagen frames. Die meet ook de beeldverhouding en vaste zwarte balken, zodat ze weggesneden kunnen worden. De resolutie is 1/12 van de video; de knippunten worden fijner bij het downloaden. Na elke frames-check draait deze stap automatisch; los draaien kan met `scripts/segments.ts <artistId> [--force]`. In het dashboard: "alleen schone fragmenten".
+
 ## Playbook
 
 Voorbereiding op het maken van video's: leren van wat al werkt (`src/lib/playbook.ts`).

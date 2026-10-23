@@ -5,7 +5,15 @@ import { useState } from "react";
 import type { VideoStatusRow } from "@/lib/types";
 import { formatCount } from "@/lib/util";
 
-export type GridVideo = VideoStatusRow & { thumb: string | null };
+export type CleanInfo = {
+  segments: { start_s: number; end_s: number; artist_p: number }[];
+  clean_seconds: number;
+  aspect: number | null;
+  crop: { x: number; y: number; w: number; h: number } | null;
+};
+export type GridVideo = VideoStatusRow & { thumb: string | null; clean: CleanInfo | null };
+
+const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 const STATUS_STYLE: Record<string, string> = {
   relevant: "bg-green-100 text-green-800",
@@ -86,6 +94,13 @@ function VideoCard({ v, onPlay }: { v: GridVideo; onPlay: () => void }) {
           {v.usability ? ` · bruikbaar ${v.usability}/5` : ""}
           {v.layer === "vision" ? " · 👁 frames gecheckt" : ""}
         </div>
+        {v.clean && v.clean.segments.length > 0 && (
+          <div className="text-emerald-700" title="Fragmenten met de artiest in beeld, zonder tekst of overlays">
+            ✂ {v.clean.segments.map((s) => `${fmt(s.start_s)}–${fmt(s.end_s)}`).join(" · ")}
+            {v.clean.aspect && v.clean.aspect > 0.7 ? ` · ${v.clean.aspect > 1.2 ? "liggend" : "vierkant"}` : ""}
+            {v.clean.crop ? " · balken" : ""}
+          </div>
+        )}
         <p className="line-clamp-2 text-zinc-500" title={`${v.caption ?? ""}\n\n${v.layer ?? ""}: ${v.reason ?? ""}`}>
           {v.caption}
         </p>
