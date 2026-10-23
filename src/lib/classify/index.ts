@@ -1,7 +1,7 @@
 import "server-only";
 import { config, env } from "../env";
 import { db } from "../supabase";
-import { FRAME_COUNT, grabFrames } from "../frames";
+import { FRAME_COUNT, grabFrames, pruneFrames } from "../frames";
 import { buildArtistSheet, loadSheet, type SheetImage } from "../sheet";
 import { chunks, mapLimit } from "../util";
 import type { Artist, ContentType, Status, VideoRow } from "../types";
@@ -22,7 +22,7 @@ export type ClassifyStats = {
   provider: string | null;
   rules: { unrelated: number };
   llm: { classified: number; failed: number; errors: string[] };
-  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[] };
+  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[]; framesPruned?: number };
   distribution: Record<Status, number>;
   byContentType: Record<string, number>; // relevant videos only
 };
@@ -116,11 +116,15 @@ export async function classifyArtist(
 
   if (opts.vision && stats.provider) await runVision(artist, layers, examples, stats, opts);
 
-  const statuses = await selectAll<{ status: Status; content_type: ContentType | null }>(
+  const statuses = await selectAll<{ id: string; status: Status; content_type: ContentType | null }>(
     "video_status",
-    "status, content_type",
+    "id, status, content_type",
     artistId,
   );
+  if (opts.vision && stats.provider) {
+    const keep = new Set(statuses.filter((s) => s.status === "relevant" || s.status === "review").map((s) => s.id));
+    stats.vision.framesPruned = await pruneFrames(artistId, keep);
+  }
   for (const s of statuses) {
     stats.distribution[s.status]++;
     if (s.status === "relevant" && s.content_type)

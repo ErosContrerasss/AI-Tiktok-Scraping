@@ -4,7 +4,6 @@ import { ArtistForm } from "@/components/ArtistForm";
 import { FanAccountSuggestions } from "@/components/FanAccountSuggestions";
 import { QueryYieldTable } from "@/components/QueryYieldTable";
 import { ArtistSheet } from "@/components/ArtistSheet";
-import { SHEET_BUCKET } from "@/lib/sheet";
 import { RunPanel } from "@/components/RunPanel";
 import { VideoGrid, type GridVideo } from "@/components/VideoGrid";
 import { getArtist } from "@/lib/artists";
@@ -12,7 +11,8 @@ import { llmProvider } from "@/lib/classify/llm";
 import { config } from "@/lib/env";
 import type { IngestStats } from "@/lib/ingest";
 import { queryYield, suggestFanAccounts } from "@/lib/suggestions";
-import { db, publicThumbUrl } from "@/lib/supabase";
+import { BUCKETS, media, publicThumbUrl } from "@/lib/media";
+import { db } from "@/lib/supabase";
 import { CONTENT_TYPES, STATUSES, type Status, type VideoStatusRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -77,8 +77,8 @@ export default async function ArtistPage({
     queryYield(id),
     Promise.all(
       artist.artist_sheet.map(async (entry) => {
-        const { data } = await supabase.storage.from(SHEET_BUCKET).createSignedUrl(entry.path, 3600);
-        return { ...entry, url: data?.signedUrl ?? "" };
+        const url = await media().signedUrl(BUCKETS.sheets, entry.path, 3600);
+        return { ...entry, url: url ?? "" };
       }),
     ),
   ]);

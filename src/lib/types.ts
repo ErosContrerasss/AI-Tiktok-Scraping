@@ -35,6 +35,7 @@ export type Artist = {
   traits: string;
   notes: string;
   region: string | null;
+  last_ingest_at: string | null; // end of the last ingest; refresh mode only searches since then
   created_at: string;
 };
 

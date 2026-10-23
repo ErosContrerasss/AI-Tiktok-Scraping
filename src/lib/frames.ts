@@ -6,11 +6,12 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import ffmpegStatic from "ffmpeg-static";
 import { socialFetch } from "./socialfetch";
-import { db, THUMB_BUCKET } from "./supabase";
+import { BUCKETS, media } from "./media";
+import { db } from "./supabase";
 
 const run = promisify(execFile);
 const FFMPEG = ffmpegStatic ?? "ffmpeg";
-const FRAME_WIDTH = 360;
+const FRAME_SIDE = 360;
 export const FRAME_COUNT = Number(process.env.FRAME_COUNT ?? 12);
 
 export type Frame = { image: Buffer; atSeconds: number | null };
@@ -25,8 +26,6 @@ type VideoForFrames = {
 };
 
 export type FramesResult = { frames: Frame[]; credits: number; stored: boolean };
-
-export const FRAMES_BUCKET = "frames";
 
 // Frames are extracted once and kept in Storage ({artist_id}/{video_id}/{nn}_{seconds}.jpg),
 // so re-classifying never needs TikTok's expiring video links again. First extraction: the
@@ -68,13 +67,13 @@ function pickEvenly<T>(items: T[], count: number): T[] {
 
 async function loadStoredFrames(artistId: string, videoId: string): Promise<Frame[]> {
   const folder = `${artistId}/${videoId}`;
-  const { data: files } = await db().storage.from(FRAMES_BUCKET).list(folder, { limit: 100, sortBy: { column: "name", order: "asc" } });
-  if (!files?.length) return [];
+  const names = await media().list(BUCKETS.frames, folder);
+  if (!names.length) return [];
   const frames = await Promise.all(
-    files.map(async (f): Promise<Frame | null> => {
-      const { data } = await db().storage.from(FRAMES_BUCKET).download(`${folder}/${f.name}`);
-      const seconds = Number(f.name.replace(/\.jpg$/, "").split("_")[1]);
-      return data ? { image: Buffer.from(await data.arrayBuffer()), atSeconds: Number.isFinite(seconds) ? seconds : null } : null;
+    names.map(async (name): Promise<Frame | null> => {
+      const image = await media().get(BUCKETS.frames, `${folder}/${name}`);
+      const seconds = Number(name.replace(/\.jpg$/, "").split("_")[1]);
+      return image ? { image, atSeconds: Number.isFinite(seconds) ? seconds : null } : null;
     }),
   );
   return frames.filter((f): f is Frame => !!f);
@@ -83,20 +82,13 @@ async function loadStoredFrames(artistId: string, videoId: string): Promise<Fram
 async function storeFrames(artistId: string, videoId: string, frames: Frame[]) {
   await Promise.all(
     frames.map((f, i) =>
-      db()
-        .storage.from(FRAMES_BUCKET)
-        .upload(`${artistId}/${videoId}/${String(i).padStart(2, "0")}_${f.atSeconds ?? "na"}.jpg`, f.image, {
-          contentType: "image/jpeg",
-          upsert: true,
-        }),
+      media().put(BUCKETS.frames, `${artistId}/${videoId}/${String(i).padStart(2, "0")}_${f.atSeconds ?? "na"}.jpg`, f.image, "image/jpeg"),
     ),
   );
 }
 
 async function coverImage(path: string | null | undefined): Promise<Buffer | null> {
-  if (!path) return null;
-  const { data } = await db().storage.from(THUMB_BUCKET).download(path);
-  return data ? Buffer.from(await data.arrayBuffer()) : null;
+  return path ? media().get(BUCKETS.thumbnails, path) : null;
 }
 
 async function fetchMp4(url: string | null | undefined): Promise<Buffer | null> {
@@ -110,8 +102,8 @@ async function fetchMp4(url: string | null | undefined): Promise<Buffer | null> 
   }
 }
 
-// One ffmpeg pass: `count` frames evenly spread over the video, scaled to 360px wide
-// (Jev needs at least 280px per side).
+// One ffmpeg pass: `count` frames evenly spread over the video, shortest side scaled to
+// 360px (Jev needs at least 280px per side; landscape videos scaled by width fell below that).
 async function extractFrames(mp4: Buffer, durationMs: number | null, count: number): Promise<Frame[]> {
   const dir = await mkdtemp(join(tmpdir(), "frames-"));
   try {
@@ -123,7 +115,7 @@ async function extractFrames(mp4: Buffer, durationMs: number | null, count: numb
       "-loglevel", "error",
       "-i", input,
       // Sample in the middle of each segment, so the first frame isn't a black/title card.
-      "-vf", `fps=1/${step.toFixed(3)}:start_time=${(step / 2).toFixed(3)},scale=${FRAME_WIDTH}:-2`,
+      "-vf", `fps=1/${step.toFixed(3)}:start_time=${(step / 2).toFixed(3)},scale='if(gt(iw,ih),-2,${FRAME_SIDE})':'if(gt(iw,ih),${FRAME_SIDE},-2)'`,
       "-frames:v", String(count),
       "-q:v", "5",
       join(dir, "f%03d.jpg"),
@@ -136,4 +128,20 @@ async function extractFrames(mp4: Buffer, durationMs: number | null, count: numb
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// Frames only earn their storage for videos we keep (relevant + review). After vision has
+// judged a video unrelated, its frames go; a human thumbs-up later simply re-extracts them.
+export async function pruneFrames(artistId: string, keepIds: Set<string>): Promise<number> {
+  const folders = await media().list(BUCKETS.frames, artistId);
+  const drop = folders.filter((videoId) => !keepIds.has(videoId));
+  let removed = 0;
+  await Promise.all(
+    drop.map(async (videoId) => {
+      const names = await media().list(BUCKETS.frames, `${artistId}/${videoId}`);
+      await media().remove(BUCKETS.frames, names.map((n) => `${artistId}/${videoId}/${n}`));
+      removed += names.length;
+    }),
+  );
+  return removed;
 }

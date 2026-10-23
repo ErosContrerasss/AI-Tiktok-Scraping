@@ -5,7 +5,8 @@ import { cropFace, toJevImage } from "./images";
 import { normalizeVideo } from "./normalize";
 import { socialFetch } from "./socialfetch";
 import { env } from "./env";
-import { db, THUMB_BUCKET } from "./supabase";
+import { BUCKETS, media } from "./media";
+import { db } from "./supabase";
 import type { Artist } from "./types";
 import { mapLimit } from "./util";
 
@@ -15,7 +16,6 @@ import { mapLimit } from "./util";
 // pairwise, and the biggest group of the same person wins, with a bonus when the profile
 // picture is in it (own posts also show collaborators, and profile pictures can hide the face).
 
-export const REFERENCE_BUCKET = "references";
 const MAX_REFERENCES = 4;
 const IMAGES_HEADER = { "TypeSafe-Danger-Zone-Images": "true" };
 let client: TypeSafeClient | null = null;
@@ -24,8 +24,8 @@ const jev = () => (client ??= new TypeSafeClient({ defaultModel: JEV_MODEL }));
 export async function loadReferences(artist: Artist): Promise<Buffer[]> {
   const out: Buffer[] = [];
   for (const path of artist.reference_images ?? []) {
-    const { data } = await db().storage.from(REFERENCE_BUCKET).download(path);
-    if (data) out.push(Buffer.from(await data.arrayBuffer()));
+    const data = await media().get(BUCKETS.sheets, path);
+    if (data) out.push(data);
   }
   return out;
 }
@@ -47,8 +47,8 @@ export async function buildReferences(artist: Artist): Promise<ReferenceResult> 
     .limit(16);
   const covers: Buffer[] = [];
   for (const row of stored ?? []) {
-    const { data } = await supabase.storage.from(THUMB_BUCKET).download(row.thumbnail_cached_path);
-    if (data) covers.push(Buffer.from(await data.arrayBuffer()));
+    const data = await media().get(BUCKETS.thumbnails, row.thumbnail_cached_path);
+    if (data) covers.push(data);
   }
   if (covers.length < 6) {
     for (const handle of artist.handles) {
@@ -138,12 +138,11 @@ export async function buildReferences(artist: Artist): Promise<ReferenceResult> 
 
   // 3. Store them; replace any previous set.
   const old = artist.reference_images ?? [];
-  if (old.length) await supabase.storage.from(REFERENCE_BUCKET).remove(old);
+  if (old.length) await media().remove(BUCKETS.sheets, old);
   const paths: string[] = [];
   for (const [n, c] of chosen.entries()) {
     const path = `${artist.id}/ref_${Date.now()}_${n}.jpg`;
-    const { error } = await supabase.storage.from(REFERENCE_BUCKET).upload(path, c.img, { contentType: "image/jpeg", upsert: true });
-    if (!error) paths.push(path);
+    if (await media().put(BUCKETS.sheets, path, c.img, "image/jpeg")) paths.push(path);
   }
   await supabase.from("artists").update({ reference_images: paths }).eq("id", artist.id);
   return { paths, candidates: images.length, credits };

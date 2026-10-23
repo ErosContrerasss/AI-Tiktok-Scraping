@@ -1,7 +1,7 @@
 import "server-only";
 import { config } from "./env";
 import { normalizeVideo, type NormalizedVideo } from "./normalize";
-import { socialFetch, type SfListResponse } from "./socialfetch";
+import { socialFetch, type DatePosted, type SfListResponse } from "./socialfetch";
 import { db } from "./supabase";
 import { cacheThumbnail } from "./thumbnails";
 import { chunks, containsTerm, mapLimit, uniq } from "./util";
@@ -15,11 +15,14 @@ export type TaskStat = {
   pages: number;
   found: number;
   credits: number;
+  stoppedEarly?: boolean; // refresh: a page was (almost) all known videos
   error?: string;
 };
 
 export type IngestStats = {
   runId: number;
+  mode: IngestMode;
+  datePosted: DatePosted | null; // search date filter used in refresh mode
   maxPages: number;
   tasks: TaskStat[];
   totalFound: number; // all rows returned, including duplicates
@@ -33,16 +36,35 @@ export type IngestStats = {
   credits: number;
 };
 
+export type IngestMode = "full" | "refresh";
+
 export type IngestOptions = {
+  // "refresh": only look for what's new since the last ingest. Searches get a date filter
+  // and every query stops paging once a page is mostly videos we already have.
+  mode?: IngestMode;
   maxPages?: number;
   // Off by default: the goal is footage of the artist posted by OTHER accounts.
   includeOwnProfile?: boolean; // fetch the artist's own posts (also needed for sound discovery)
   includeSounds?: boolean; // videos using the artist's sounds (mostly people dancing to the song)
 };
 
+// Smallest date window Social Fetch offers that still covers everything since `since`.
+export function datePostedSince(since: string | null): DatePosted | null {
+  if (!since) return null;
+  const days = (Date.now() - new Date(since).getTime()) / 86_400_000 + 1; // one day margin
+  if (days <= 7) return "this-week";
+  if (days <= 31) return "this-month";
+  if (days <= 92) return "last-3-months";
+  if (days <= 183) return "last-6-months";
+  return null;
+}
+
+// Refresh: stop paging a query when less than this share of a page is new.
+const REFRESH_MIN_NEW = 0.2;
+
 // Search first: the artist name combined with context words that surface footage
 // ("russo live", "russo optreden"), songs, collaborators and custom queries.
-export function buildTasks(artist: Artist, opts: IngestOptions = {}): Task[] {
+export function buildTasks(artist: Artist, opts: IngestOptions = {}, datePosted: DatePosted | null = null): Task[] {
   const names = uniq([artist.name, ...artist.aliases]);
   const region = artist.region ?? undefined;
   const searchQueries = uniq([
@@ -59,7 +81,7 @@ export function buildTasks(artist: Artist, opts: IngestOptions = {}): Task[] {
   const search = (q: string, sortBy?: "date-posted") => ({
     type: "search" as const,
     query: sortBy ? `${q} [recent]` : q,
-    fetchPage: (c?: string) => socialFetch.searchVideos(q, { cursor: c, region, sortBy }),
+    fetchPage: (c?: string) => socialFetch.searchVideos(q, { cursor: c, region, sortBy, datePosted: datePosted ?? undefined }),
   });
   const profile = (type: "profile" | "fan_account", handle: string) => ({
     type,
@@ -70,7 +92,8 @@ export function buildTasks(artist: Artist, opts: IngestOptions = {}): Task[] {
   return [
     ...searchQueries.map((q) => search(q)),
     // Relevance ranking favours old viral videos; also pull the newest uploads.
-    ...names.map((n) => search(n, "date-posted")),
+    // (With a date filter the plain name search already covers that.)
+    ...(datePosted ? [] : names.map((n) => search(n, "date-posted"))),
     ...hashtags.map((h) => ({
       type: "hashtag" as const,
       query: h,
@@ -117,14 +140,21 @@ export function discoverSounds(artist: Artist, videos: NormalizedVideo[]): { id:
 
 export async function ingestArtist(artistId: string, opts: IngestOptions = {}): Promise<IngestStats> {
   const maxPages = opts.maxPages ?? config.maxPages;
+  const mode = opts.mode ?? "full";
+  const startedAt = new Date().toISOString();
   const supabase = db();
 
   const { data: artist, error } = await supabase.from("artists").select("*").eq("id", artistId).single<Artist>();
   if (error || !artist) throw new Error(`Artist ${artistId} not found`);
 
+  const refresh = mode === "refresh";
+  const datePosted = refresh ? datePostedSince(artist.last_ingest_at) : null;
+  // Refresh needs to know what we already have, to stop paging when a page has nothing new.
+  const known = refresh ? new Set((await selectIds(artistId)).map((r) => r.id)) : new Set<string>();
+
   const { data: run } = await supabase
     .from("ingest_runs")
-    .insert({ artist_id: artistId, stats: { maxPages } })
+    .insert({ artist_id: artistId, stats: { maxPages, mode } })
     .select("id")
     .single();
   const runId = run!.id as number;
@@ -142,8 +172,8 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
         const res = await task.fetchPage(cursor);
         stat.pages++;
         stat.credits += res.meta.creditsCharged ?? 0;
-        for (const item of res.data.videos ?? []) {
-          if (!item?.id) continue;
+        const items = (res.data.videos ?? []).filter((item) => !!item?.id);
+        for (const item of items) {
           stat.found++;
           perSourceFound[task.type]++;
           perSourceIds[task.type].add(item.id);
@@ -157,6 +187,10 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
           }
         }
         if (!res.data.page?.hasMore || !res.data.page.nextCursor) break;
+        if (refresh && items.filter((item) => !known.has(item.id)).length < items.length * REFRESH_MIN_NEW) {
+          stat.stoppedEarly = true;
+          break;
+        }
         cursor = res.data.page.nextCursor;
       }
     } catch (e) {
@@ -165,7 +199,7 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
     return stat;
   };
 
-  const taskStats = await mapLimit(buildTasks(artist, opts), 4, runTask);
+  const taskStats = await mapLimit(buildTasks(artist, opts, datePosted), 4, runTask);
 
   let discoveredSounds: { id: string; title: string | null }[] = [];
   if (opts.includeSounds) {
@@ -222,6 +256,8 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
   const ownHandles = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
   const stats: IngestStats = {
     runId,
+    mode,
+    datePosted,
     maxPages,
     tasks: taskStats,
     totalFound: taskStats.reduce((n, t) => n + t.found, 0),
@@ -247,6 +283,18 @@ export async function ingestArtist(artistId: string, opts: IngestOptions = {}): 
     .from("ingest_runs")
     .update({ finished_at: new Date().toISOString(), credits_used: stats.credits, stats })
     .eq("id", runId);
+  // The start time, not the end: videos posted during the run are picked up next time.
+  await supabase.from("artists").update({ last_ingest_at: startedAt }).eq("id", artistId);
 
   return stats;
+}
+
+async function selectIds(artistId: string): Promise<{ id: string }[]> {
+  const out: { id: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db().from("videos").select("id").eq("artist_id", artistId).order("id").range(from, from + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) return out;
+  }
 }

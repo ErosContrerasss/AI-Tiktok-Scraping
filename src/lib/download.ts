@@ -1,6 +1,7 @@
 import "server-only";
 import { socialFetch } from "./socialfetch";
-import { db, VIDEO_BUCKET } from "./supabase";
+import { BUCKETS, media } from "./media";
+import { db } from "./supabase";
 
 const SIGNED_URL_TTL = 60 * 60; // 1 hour
 
@@ -35,19 +36,15 @@ export async function downloadVideo(videoId: string): Promise<DownloadResult> {
   const file = await fetch(mediaUrl, { cache: "no-store" });
   if (!file.ok) throw new Error(`Fetching media failed: ${file.status}`);
   const storagePath = `${video.artist_id}/${videoId}.mp4`;
-  const { error } = await supabase.storage
-    .from(VIDEO_BUCKET)
-    .upload(storagePath, await file.arrayBuffer(), { contentType: "video/mp4", upsert: true });
-  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  if (!(await media().put(BUCKETS.videos, storagePath, Buffer.from(await file.arrayBuffer()), "video/mp4")))
+    throw new Error("Storage upload failed");
 
   await supabase.from("downloads").insert({ video_id: videoId, storage_path: storagePath, credits_used: credits });
   return { url: await signedUrl(storagePath), storagePath, creditsUsed: credits, cached: false };
 }
 
 export async function signedUrl(path: string): Promise<string> {
-  const { data, error } = await db()
-    .storage.from(VIDEO_BUCKET)
-    .createSignedUrl(path, SIGNED_URL_TTL, { download: true });
-  if (error || !data) throw new Error(`Signing URL failed: ${error?.message}`);
-  return data.signedUrl;
+  const url = await media().signedUrl(BUCKETS.videos, path, SIGNED_URL_TTL, { download: true });
+  if (!url) throw new Error("Signing URL failed");
+  return url;
 }

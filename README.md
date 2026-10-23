@@ -43,6 +43,12 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - afspelen via de TikTok-embed, duim omhoog/omlaag als human-classificatie;
 - "Download": roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
 
+## Verversen en opslag
+
+- **Verversen (alleen nieuw):** voor de maandelijkse ronde. De zoekopdrachten krijgen een datumfilter vanaf de vorige ingest (`artists.last_ingest_at`: deze week / maand / 3 / 6 maanden). Elke query stopt met pagineren zodra minder dan 20% van een pagina nieuw is. Video's die al beoordeeld zijn worden niet opnieuw gecheckt.
+- **Frames:** de frames-check bewaart frames in de privé-bucket `frames` (`{artist}/{video}/…`), zodat herclassificeren geen verlopen TikTok-links meer nodig heeft. Na de beoordeling worden frames van unrelated video's opgeruimd; alleen relevant en review blijven staan. Voor oudere runs: `scripts/prune-frames.ts <artistId>`.
+- **Opslag-interface:** alle media (thumbnails, frames, sheet-foto's, downloads) loopt via `src/lib/media.ts` (`media().put/get/list/remove/signedUrl`). Nu is dat Supabase Storage. Een S3-compatibele store zoals Cloudflare R2 (geen egress-kosten) is één extra klasse, gekozen met `MEDIA_STORE`.
+
 ## Nieuwe artiest
 
 Plak een TikTok-link bij "Nieuwe artiest" → "Card voorstellen" (`src/lib/bootstrap.ts`, ±5 credits). De tool haalt profiel, eigen posts en één zoekpagina op, en de AI vult naam, aliassen, regio, notitie, songs, collaborators, hashtags, negatieve termen en geblokkeerde accounts in. Controleer de card vóór het opslaan.

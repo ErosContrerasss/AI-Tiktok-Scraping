@@ -27,10 +27,10 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
     return json as T;
   }
 
-  async function runIngest() {
+  async function runIngest(mode: "full" | "refresh") {
     setError(null);
-    setBusy("Ingest loopt… (kan een paar minuten duren)");
-    const stats = await call<IngestStats>(`/api/artists/${artistId}/ingest`, { maxPages, includeOwnProfile, includeSounds });
+    setBusy(mode === "refresh" ? "Verversen: alleen nieuwe video's zoeken…" : "Ingest loopt… (kan een paar minuten duren)");
+    const stats = await call<IngestStats>(`/api/artists/${artistId}/ingest`, { maxPages, mode, includeOwnProfile, includeSounds });
     if (stats) {
       setIngest(stats);
       // Frames right away: TikTok's video links are still fresh (free) just after ingest.
@@ -52,8 +52,16 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
   return (
     <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <button onClick={runIngest} disabled={!!busy} className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white disabled:opacity-50">
+        <button onClick={() => runIngest("full")} disabled={!!busy} className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white disabled:opacity-50">
           Ingest + classificeer
+        </button>
+        <button
+          onClick={() => runIngest("refresh")}
+          disabled={!!busy}
+          title="Zoekt alleen video's van na de vorige ingest (datumfilter) en stopt per query zodra een pagina vooral bekende video's bevat. Bedoeld voor de maandelijkse ronde."
+          className="rounded-md border border-zinc-900 px-3 py-2 text-sm disabled:opacity-50"
+        >
+          Ververs (alleen nieuw)
         </button>
         <label className="flex items-center gap-2 text-sm">
           max pagina&apos;s per query
@@ -115,6 +123,12 @@ function IngestSummary({ s }: { s: IngestStats }) {
       <p className="text-zinc-600">
         {s.totalFound} gevonden → {s.unique} na ontdubbelen ({s.newVideos} nieuw) · {s.credits} credits · max {s.maxPages} pag.
       </p>
+      {s.mode === "refresh" && (
+        <p className="text-xs text-zinc-600">
+          Verversen{s.datePosted ? ` (filter: ${s.datePosted})` : ""} · {s.tasks.filter((t) => t.stoppedEarly).length} van {s.tasks.length} queries
+          vroeg gestopt
+        </p>
+      )}
       <table className="mt-2 text-xs">
         <thead className="text-zinc-500">
           <tr>
@@ -168,7 +182,7 @@ function ClassifySummary({ s }: { s: ClassifyStats }) {
         Regels: {s.rules.unrelated} uitgesloten · LLM ({s.provider ?? "geen"}): {s.llm.classified} gedaan
         {s.llm.failed ? `, ${s.llm.failed} mislukt` : ""}
         {s.vision.checked || s.vision.failed
-          ? ` · Frames (${s.vision.mode ?? "?"}): ${s.vision.checked} gecheckt${s.vision.failed ? `, ${s.vision.failed} mislukt` : ""} (${s.vision.credits} credits)`
+          ? ` · Frames (${s.vision.mode ?? "?"}): ${s.vision.checked} gecheckt${s.vision.failed ? `, ${s.vision.failed} mislukt` : ""} (${s.vision.credits} credits)${s.vision.framesPruned ? ` · ${s.vision.framesPruned} frames van unrelated opgeruimd` : ""}`
           : ""}
       </p>
       <p className="mt-1">

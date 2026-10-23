@@ -11,11 +11,3 @@ export function db(): SupabaseClient {
   });
   return client;
 }
-
-export const THUMB_BUCKET = "thumbnails";
-export const VIDEO_BUCKET = "videos";
-
-export function publicThumbUrl(path: string | null): string | null {
-  if (!path) return null;
-  return db().storage.from(THUMB_BUCKET).getPublicUrl(path).data.publicUrl;
-}

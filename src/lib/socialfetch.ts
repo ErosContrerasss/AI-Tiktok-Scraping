@@ -91,10 +91,12 @@ async function get<T>(path: string, params: Record<string, string | undefined>):
   }
 }
 
+export type DatePosted = "yesterday" | "this-week" | "this-month" | "last-3-months" | "last-6-months" | "all-time";
+
 export const socialFetch = {
   searchVideos: (
     query: string,
-    opts: { cursor?: string; region?: string; sortBy?: "relevance" | "most-liked" | "date-posted" } = {},
+    opts: { cursor?: string; region?: string; sortBy?: "relevance" | "most-liked" | "date-posted"; datePosted?: DatePosted } = {},
   ) => get<SfListResponse>("/v1/tiktok/search", { query, ...opts }),
   searchHashtag: (hashtag: string, cursor?: string) =>
     get<SfListResponse>("/v1/tiktok/search/hashtags", { hashtag, cursor }),

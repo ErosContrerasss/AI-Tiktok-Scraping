@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { getArtist } from "@/lib/artists";
 import { handle, jsonBody, type IdCtx } from "@/lib/http";
-import { buildArtistSheet, SHEET_BUCKET } from "@/lib/sheet";
+import { BUCKETS, media } from "@/lib/media";
+import { buildArtistSheet } from "@/lib/sheet";
 import { db } from "@/lib/supabase";
 
 export const maxDuration = 300;
@@ -20,7 +21,7 @@ export const DELETE = handle(async (req, { params }: IdCtx) => {
   const artist = await getArtist(id);
   if (!artist) throw new Error("Artist not found");
   const artist_sheet = artist.artist_sheet.filter((e) => e.path !== path);
-  await db().storage.from(SHEET_BUCKET).remove([path]);
+  await media().remove(BUCKETS.sheets, [path]);
   const { error } = await db().from("artists").update({ artist_sheet }).eq("id", id);
   if (error) throw new Error(error.message);
   return { artist_sheet };

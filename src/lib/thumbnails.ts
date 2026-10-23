@@ -1,6 +1,6 @@
 import "server-only";
 import convert from "heic-convert";
-import { db, THUMB_BUCKET } from "./supabase";
+import { BUCKETS, media } from "./media";
 
 // TikTok serves many covers as HEIC, which Chrome/Firefox can't render. Convert to JPEG.
 
@@ -27,10 +27,7 @@ export async function cacheThumbnail(artistId: string, videoId: string, url: str
     const image = await toBrowserImage(Buffer.from(await res.arrayBuffer()), res.headers.get("content-type") ?? "");
     const path = `${artistId}/${videoId}.${image.ext}`;
     for (let attempt = 0; attempt < 2; attempt++) {
-      const { error } = await db()
-        .storage.from(THUMB_BUCKET)
-        .upload(path, image.data, { contentType: image.contentType, upsert: true });
-      if (!error) return path;
+      if (await media().put(BUCKETS.thumbnails, path, image.data, image.contentType)) return path;
     }
     return null;
   } catch {

@@ -6,7 +6,8 @@ import { cropFace, toJevImage } from "./images";
 import { generateStructured } from "./llm-client";
 import { normalizeVideo } from "./normalize";
 import { socialFetch } from "./socialfetch";
-import { db, THUMB_BUCKET } from "./supabase";
+import { BUCKETS, media } from "./media";
+import { db } from "./supabase";
 import type { Artist } from "./types";
 import { mapLimit } from "./util";
 
@@ -20,7 +21,6 @@ import { mapLimit } from "./util";
 //    artist (namesakes on Apple Music or collaborators on own posts drop out).
 // 4. Fill slots from that person's photos and describe stable visual traits.
 
-export const SHEET_BUCKET = "references";
 const IMAGES_HEADER = { "TypeSafe-Danger-Zone-Images": "true" };
 const MAX_CANDIDATES = 40;
 const MAX_FACES = 30;
@@ -102,8 +102,8 @@ export async function collectCandidates(artist: Artist) {
       .order("views", { ascending: false })
       .limit(12);
     for (const row of stored ?? []) {
-      const { data } = await supabase.storage.from(THUMB_BUCKET).download(row.thumbnail_cached_path);
-      if (data) out.push({ source: "tiktok_cover", data: Buffer.from(await data.arrayBuffer()) });
+      const data = await media().get(BUCKETS.thumbnails, row.thumbnail_cached_path);
+      if (data) out.push({ source: "tiktok_cover", data });
     }
     // One profile page also tells us the linked Instagram account (author.ins_id).
     if (!stored?.length || !instagramHandle) {
@@ -315,13 +315,12 @@ export async function buildArtistSheet(artist: Artist): Promise<SheetResult> {
 
   // Replace the previous sheet.
   const old = (artist.artist_sheet ?? []).map((e) => e.path);
-  if (old.length) await supabase.storage.from(SHEET_BUCKET).remove(old);
+  if (old.length) await media().remove(BUCKETS.sheets, old);
   const stamp = Date.now();
   const entries: SheetEntry[] = [];
   for (const [n, f] of filled.entries()) {
     const path = `${artist.id}/sheet_${stamp}_${n}_${f.slot}.jpg`;
-    const { error } = await supabase.storage.from(SHEET_BUCKET).upload(path, f.image, { contentType: "image/jpeg", upsert: true });
-    if (!error) entries.push({ slot: f.slot, path, source: f.source });
+    if (await media().put(BUCKETS.sheets, path, f.image, "image/jpeg")) entries.push({ slot: f.slot, path, source: f.source });
   }
   await supabase
     .from("artists")
@@ -352,8 +351,8 @@ export type SheetImage = { label: string; image: Buffer };
 export async function loadSheet(artist: Artist): Promise<SheetImage[]> {
   const out: SheetImage[] = [];
   for (const entry of artist.artist_sheet ?? []) {
-    const { data } = await db().storage.from(SHEET_BUCKET).download(entry.path);
-    if (data) out.push({ label: entry.slot, image: Buffer.from(await data.arrayBuffer()) });
+    const image = await media().get(BUCKETS.sheets, entry.path);
+    if (image) out.push({ label: entry.slot, image });
   }
   return out;
 }
