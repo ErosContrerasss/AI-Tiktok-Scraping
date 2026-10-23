@@ -52,7 +52,7 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 
 ## Schone fragmenten
 
-Voor herdistributie: per bruikbare video de stukken waarin de artiest in beeld is, zonder tekst of overlays (een klein watermerk in een hoek mag) en zonder zwarte frames (`src/lib/segments.ts`, tabel `video_segments`). De stap gebruikt de resultaten per frame van de frames-check plus een pixelcheck van de opgeslagen frames. Die meet ook de beeldverhouding en vaste zwarte balken, zodat ze weggesneden kunnen worden. De resolutie is 1/12 van de video; de knippunten worden fijner bij het downloaden. Na elke frames-check draait deze stap automatisch; los draaien kan met `scripts/segments.ts <artistId> [--force]`. In het dashboard: "alleen schone fragmenten".
+Voor herdistributie: per bruikbare video de stukken waarin de artiest in beeld is, zonder tekst of overlays (een klein watermerk in een hoek mag) en zonder zwarte frames (`src/lib/segments.ts`, tabel `video_segments`). De stap gebruikt de resultaten per frame van de frames-check plus een pixelcheck van de opgeslagen frames. Die meet ook de beeldverhouding en vaste zwarte balken, zodat ze weggesneden kunnen worden. Bij vaste balken wordt het uitsnijvak bepaald door wat er tussen de frames beweegt (captions en emoji's op de balk staan stil en vallen erbuiten), en wordt de tekst na het bijsnijden opnieuw gemeten met Jev. De resolutie is 1/12 van de video; de knippunten worden fijner bij het downloaden. Na elke frames-check draait deze stap automatisch; los draaien kan met `scripts/segments.ts <artistId> [--force]`. In het dashboard: "alleen schone fragmenten".
 
 ## Playbook
 

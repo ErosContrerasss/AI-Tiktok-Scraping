@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import ffmpegStatic from "ffmpeg-static";
 import { selectAll } from "./classify";
+import { textLevelsWithJev } from "./classify/jev";
+import { ffmpegImage, toJevImage } from "./images";
 import { loadStoredFrames, type Frame } from "./frames";
 import { db } from "./supabase";
 import type { Status } from "./types";
@@ -15,7 +17,8 @@ import { chunks, mapLimit } from "./util";
 // screen (artist_p >= 0.7), nothing is overlaid (text level < 1.25: at most a small corner
 // watermark) and the picture isn't black. Built from the per-frame results of the frames
 // check plus a pixel check of the stored frames, which also measures black bars so they can
-// be cropped away. Resolution is one frame per 1/12 of the video: fine for selecting, and
+// be cropped away. Reposts of landscape video often carry their caption only in the black bar:
+// for videos with bars, the text is measured again on the cropped frames. Resolution is one frame per 1/12 of the video: fine for selecting, and
 // cut points get refined when the clip is downloaded.
 
 const run = promisify(execFile);
@@ -53,6 +56,52 @@ async function pixelCheck(frames: Frame[]): Promise<{ pixels: Pixels[]; aspect: 
       });
     }
     return { pixels: out, aspect: size ? Math.round((size.w / size.h) * 100) / 100 : null };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+// The part of the picture that changes between frames: the real video. Bars, and captions or
+// emojis printed on them, stay still. Returns a box as fractions, or null when everything moves.
+export async function motionBox(frames: Frame[]): Promise<Crop | null> {
+  if (frames.length < 4) return null;
+  const W = 72;
+  const H = 128;
+  const dir = await mkdtemp(join(tmpdir(), "mot-"));
+  try {
+    await Promise.all(frames.map((f, i) => writeFile(join(dir, `${String(i).padStart(2, "0")}.jpg`), f.image)));
+    const { stdout } = await run(
+      FFMPEG,
+      ["-loglevel", "error", "-i", join(dir, "%02d.jpg"), "-vf", `scale=${W}:${H},format=gray`, "-f", "rawvideo", "-"],
+      { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 },
+    );
+    const raw = stdout as unknown as Buffer;
+    const n = Math.floor(raw.length / (W * H));
+    if (n < 4) return null;
+    // Mean absolute deviation over time, per pixel, then averaged per row and per column.
+    const rows = new Array(H).fill(0);
+    const cols = new Array(W).fill(0);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        let mean = 0;
+        for (let k = 0; k < n; k++) mean += raw[k * W * H + y * W + x];
+        mean /= n;
+        let dev = 0;
+        for (let k = 0; k < n; k++) dev += Math.abs(raw[k * W * H + y * W + x] - mean);
+        dev /= n;
+        rows[y] += dev / W;
+        cols[x] += dev / H;
+      }
+    const span = (xs: number[]) => {
+      const t = Math.max(4, 0.25 * Math.max(...xs));
+      const first = xs.findIndex((v) => v > t);
+      const last = xs.length - 1 - [...xs].reverse().findIndex((v) => v > t);
+      return first < 0 ? null : { start: first / xs.length, size: (last + 1 - first) / xs.length };
+    };
+    const r = span(rows);
+    const c = span(cols);
+    if (!r || !c || (r.size >= BARS_MAX_CONTENT && c.size >= BARS_MAX_CONTENT)) return null;
+    return { x: c.start, y: r.start, w: c.size, h: r.size };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -104,7 +153,22 @@ const toSegment = (c: { start: number; end: number; ps: number[] }): Segment => 
   artist_p: Math.round((c.ps.reduce((a, b) => a + b, 0) / c.ps.length) * 100) / 100,
 });
 
-export type SegmentStats = { videos: number; withSegments: number; segments: number; cleanMinutes: number; withBars: number; skipped: number };
+// Text level of each stored frame after cropping to the content area (one Jev request).
+async function textAfterCrop(stored: Frame[], crop: Crop): Promise<number[]> {
+  const filter = `crop=iw*${crop.w.toFixed(4)}:ih*${crop.h.toFixed(4)}:iw*${crop.x.toFixed(4)}:ih*${crop.y.toFixed(4)}`;
+  const cropped = await Promise.all(stored.map(async (f) => toJevImage(await ffmpegImage(f.image, filter))));
+  return textLevelsWithJev(cropped);
+}
+
+export type SegmentStats = {
+  videos: number;
+  withSegments: number;
+  segments: number;
+  cleanMinutes: number;
+  withBars: number;
+  recropped: number; // videos whose text was re-measured after cropping the bars
+  skipped: number;
+};
 
 export async function segmentArtist(artistId: string, opts: { force?: boolean } = {}): Promise<SegmentStats> {
   const supabase = db();
@@ -136,7 +200,7 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
     for (const c of data ?? []) if (!details.has(c.video_id)) details.set(c.video_id, c.details.frames);
   }
 
-  const stats: SegmentStats = { videos: 0, withSegments: 0, segments: 0, cleanMinutes: 0, withBars: 0, skipped: 0 };
+  const stats: SegmentStats = { videos: 0, withSegments: 0, segments: 0, cleanMinutes: 0, withBars: 0, recropped: 0, skipped: 0 };
   await mapLimit(todo, 6, async (v) => {
     const results = details.get(v.id);
     if (!results?.length || !v.duration_ms) {
@@ -147,17 +211,30 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
     const checked = stored.length ? await pixelCheck(stored).catch(() => null) : null;
     const durationS = v.duration_ms / 1000;
     // Line the stored frames up with the per-frame results by timestamp (counts can differ).
-    const pixels = results.map((r, i) => {
-      if (!checked?.pixels.length) return undefined;
-      const at = r.at_seconds;
-      const j =
-        at != null && stored.every((s) => s.atSeconds != null)
-          ? stored.reduce((best, s, k) => (Math.abs(s.atSeconds! - at) < Math.abs(stored[best].atSeconds! - at) ? k : best), 0)
-          : Math.min(stored.length - 1, Math.round((i * stored.length) / results.length));
-      return checked.pixels[j];
+    const storedIndex = results.map((r, i) =>
+      r.at_seconds != null && stored.length && stored.every((s) => s.atSeconds != null)
+        ? stored.reduce((best, s, k) => (Math.abs(s.atSeconds! - r.at_seconds!) < Math.abs(stored[best].atSeconds! - r.at_seconds!) ? k : best), 0)
+        : Math.min(stored.length - 1, Math.round((i * stored.length) / results.length)),
+    );
+    // Fixed bars (cropdetect) narrowed to the moving picture, which leaves captions on the bars out.
+    const bars = checked?.pixels.length ? commonCrop(checked.pixels) : null;
+    const crop = bars ? ((await motionBox(stored).catch(() => null)) ?? bars) : null;
+    // With bars, mean luma covers the black bars too: judge the content area only.
+    const area = crop ? crop.w * crop.h : 1;
+    const pixels = storedIndex.map((j) => {
+      const p = checked?.pixels[j];
+      return p ? { ...p, yavg: p.yavg / area } : undefined;
     });
-    const segments = findSegments(results, pixels, durationS);
-    const crop = checked?.pixels.length ? commonCrop(checked.pixels) : null;
+    // Bars that held the caption: what's left after cropping may well be clean.
+    let measured = results;
+    if (crop && results.some((r) => r.text_level >= TEXT_MAX)) {
+      const after = await textAfterCrop(stored, crop).catch(() => null);
+      if (after) {
+        measured = results.map((r, i) => ({ ...r, text_level: Math.min(r.text_level, after[storedIndex[i]] ?? r.text_level) }));
+        stats.recropped++;
+      }
+    }
+    const segments = findSegments(measured, pixels, durationS);
     const cleanSeconds = Math.round(segments.reduce((n, s) => n + s.end_s - s.start_s, 0) * 10) / 10;
     await supabase.from("video_segments").upsert({
       video_id: v.id,

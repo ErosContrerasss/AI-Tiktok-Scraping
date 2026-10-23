@@ -212,3 +212,23 @@ export async function classifyFramesWithJev(
     frames: perFrame,
   };
 }
+
+// Overlaid text per image only (TEXT_LEVELS, 0-3 as expected value), e.g. to re-measure frames
+// after cropping away black bars that held the caption. One request for all images.
+export async function textLevelsWithJev(images: Buffer[]): Promise<number[]> {
+  client ??= new TypeSafeClient({ defaultModel: JEV_MODEL });
+  const response = await client.systemOne(
+    {
+      state: { frames: images.map((img) => image(img)) },
+      questions: Object.fromEntries(
+        images.map((_, i) => [
+          `text_${i}`,
+          score(`How much text, captions, stickers or emojis are overlaid on top of \`frames[${i}]\`?`, TEXT_LEVELS),
+        ]),
+      ),
+    },
+    { headers: { "TypeSafe-Danger-Zone-Images": "true" } },
+  );
+  const answers = response.answers as Record<string, { score?: number }>;
+  return images.map((_, i) => answers[`text_${i}`]?.score ?? 0);
+}
