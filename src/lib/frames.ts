@@ -17,17 +17,25 @@ export type Frame = { image: Buffer; atSeconds: number | null };
 
 type VideoForFrames = {
   id: string;
+  artist_id?: string;
   url: string | null;
   duration_ms: number | null;
   thumbnail_cached_path?: string | null;
   raw: { media?: { play?: string | null } } | null;
 };
 
-export type FramesResult = { frames: Frame[]; credits: number };
+export type FramesResult = { frames: Frame[]; credits: number; stored: boolean };
 
-// Grabs a few JPEG frames straight from TikTok's CDN (free). If the stored CDN link
-// has expired, refresh it via the single-video lookup (1 credit).
+export const FRAMES_BUCKET = "frames";
+
+// Frames are extracted once and kept in Storage ({artist_id}/{video_id}/{nn}_{seconds}.jpg),
+// so re-classifying never needs TikTok's expiring video links again. First extraction: the
+// mp4 comes straight from TikTok's CDN (free); an expired link is refreshed via the
+// single-video lookup (1 credit).
 export async function grabFrames(video: VideoForFrames, count = FRAME_COUNT): Promise<FramesResult> {
+  const stored = video.artist_id ? await loadStoredFrames(video.artist_id, video.id) : [];
+  if (stored.length >= count) return { frames: pickEvenly(stored, count), credits: 0, stored: true };
+
   let credits = 0;
   let mp4 = await fetchMp4(video.raw?.media?.play);
   if (!mp4 && video.url) {
@@ -42,11 +50,47 @@ export async function grabFrames(video: VideoForFrames, count = FRAME_COUNT): Pr
         .eq("id", video.id);
     }
   }
-  if (mp4) return { frames: await extractFrames(mp4, video.duration_ms, count), credits };
+  if (mp4) {
+    const frames = await extractFrames(mp4, video.duration_ms, Math.max(count, FRAME_COUNT));
+    if (video.artist_id) await storeFrames(video.artist_id, video.id, frames);
+    return { frames: pickEvenly(frames, count), credits, stored: false };
+  }
   // Photo slideshows (and videos we can't fetch) fall back to the cached cover image.
   const cover = await coverImage(video.thumbnail_cached_path);
-  if (cover) return { frames: [{ image: cover, atSeconds: null }], credits };
+  if (cover) return { frames: [{ image: cover, atSeconds: null }], credits, stored: false };
   throw new Error("Could not fetch video file or cover");
+}
+
+function pickEvenly<T>(items: T[], count: number): T[] {
+  if (items.length <= count) return items;
+  return Array.from({ length: count }, (_, i) => items[Math.floor((i * items.length) / count)]);
+}
+
+async function loadStoredFrames(artistId: string, videoId: string): Promise<Frame[]> {
+  const folder = `${artistId}/${videoId}`;
+  const { data: files } = await db().storage.from(FRAMES_BUCKET).list(folder, { limit: 100, sortBy: { column: "name", order: "asc" } });
+  if (!files?.length) return [];
+  const frames = await Promise.all(
+    files.map(async (f): Promise<Frame | null> => {
+      const { data } = await db().storage.from(FRAMES_BUCKET).download(`${folder}/${f.name}`);
+      const seconds = Number(f.name.replace(/\.jpg$/, "").split("_")[1]);
+      return data ? { image: Buffer.from(await data.arrayBuffer()), atSeconds: Number.isFinite(seconds) ? seconds : null } : null;
+    }),
+  );
+  return frames.filter((f): f is Frame => !!f);
+}
+
+async function storeFrames(artistId: string, videoId: string, frames: Frame[]) {
+  await Promise.all(
+    frames.map((f, i) =>
+      db()
+        .storage.from(FRAMES_BUCKET)
+        .upload(`${artistId}/${videoId}/${String(i).padStart(2, "0")}_${f.atSeconds ?? "na"}.jpg`, f.image, {
+          contentType: "image/jpeg",
+          upsert: true,
+        }),
+    ),
+  );
 }
 
 async function coverImage(path: string | null | undefined): Promise<Buffer | null> {

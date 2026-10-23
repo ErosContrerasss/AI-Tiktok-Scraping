@@ -191,6 +191,7 @@ async function runVision(
   const ids = candidates.slice(0, opts.visionLimit ?? candidates.length).map((v) => v.id);
 
   const rows: (VideoForClassify & {
+    artist_id: string;
     url: string | null;
     duration_ms: number | null;
     thumbnail_cached_path: string | null;
@@ -199,7 +200,7 @@ async function runVision(
   for (const chunk of chunks(ids, 200)) {
     const { data } = await supabase
       .from("videos")
-      .select("id, url, duration_ms, raw, thumbnail_cached_path, author_handle, caption, hashtags, sound_id, sound_title, sound_author")
+      .select("id, artist_id, url, duration_ms, raw, thumbnail_cached_path, author_handle, caption, hashtags, sound_id, sound_title, sound_author")
       .in("id", chunk);
     rows.push(...(data ?? []));
   }
