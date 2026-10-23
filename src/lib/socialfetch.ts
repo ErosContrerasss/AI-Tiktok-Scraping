@@ -63,8 +63,10 @@ async function get<T>(path: string, params: Record<string, string | undefined>):
 }
 
 export const socialFetch = {
-  searchVideos: (query: string, cursor?: string, region?: string) =>
-    get<SfListResponse>("/v1/tiktok/search", { query, cursor, region }),
+  searchVideos: (
+    query: string,
+    opts: { cursor?: string; region?: string; sortBy?: "relevance" | "most-liked" | "date-posted" } = {},
+  ) => get<SfListResponse>("/v1/tiktok/search", { query, ...opts }),
   searchHashtag: (hashtag: string, cursor?: string) =>
     get<SfListResponse>("/v1/tiktok/search/hashtags", { hashtag, cursor }),
   profileVideos: (handle: string, cursor?: string) =>

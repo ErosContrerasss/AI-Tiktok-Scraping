@@ -13,6 +13,8 @@ const FIELDS: { key: keyof Artist; label: string; hint: string }[] = [
   { key: "collaborators", label: "Collaborators", hint: "Artiesten/producers waarmee samengewerkt is" },
   { key: "negative_terms", label: "Negatieve termen", hint: "Bevat de video dit → unrelated" },
   { key: "blocked_accounts", label: "Geblokkeerde accounts", hint: "Zonder @, altijd unrelated" },
+  { key: "fan_accounts", label: "Fanaccounts", hint: "Accounts die veel footage posten; hele profiel wordt opgehaald" },
+  { key: "extra_queries", label: "Extra zoekopdrachten", hint: "Volledige zoektermen, bv. \"russo afas\" of \"russo zwarte cross\"" },
 ];
 
 export function ArtistForm({ artist }: { artist?: Artist }) {

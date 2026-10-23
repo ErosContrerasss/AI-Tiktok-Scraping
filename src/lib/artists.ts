@@ -21,6 +21,8 @@ export const ArtistInput = z.object({
   collaborators: list,
   negative_terms: list,
   blocked_accounts: list,
+  fan_accounts: list,
+  extra_queries: list,
   notes: z.string().optional().transform((v) => (v ?? "").trim()),
   region: z
     .string()
@@ -35,6 +37,7 @@ function clean(input: Omit<Artist, "id" | "created_at">) {
     ...input,
     handles: strip(input.handles, "@"),
     blocked_accounts: strip(input.blocked_accounts, "@"),
+    fan_accounts: strip(input.fan_accounts, "@"),
     hashtags: strip(input.hashtags, "#"),
   };
 }

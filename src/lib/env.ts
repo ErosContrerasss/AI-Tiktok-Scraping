@@ -15,6 +15,15 @@ export const env = {
 };
 
 export const config = {
+  // Context words combined with the artist name: these surface footage
+  // (performances, interviews, fan encounters) rather than random name matches.
+  searchModifiers: (
+    process.env.SEARCH_MODIFIERS ??
+    "live,optreden,concert,show,festival,backstage,interview,podcast,meet and greet,tour"
+  )
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
   // Max pages per query/hashtag/profile/sound during ingest (overridable per run).
   maxPages: Number(process.env.INGEST_MAX_PAGES ?? 3),
   // Routing thresholds; keep in sync with the video_status view.

@@ -16,24 +16,32 @@ Het schema staat in `supabase/migrations/0001_init.sql` (tabellen, de view `vide
 
 ## Hoe het werkt
 
-De focus ligt op content van **andere accounts** over de artiest. Eigen posts worden wel opgehaald (voor sound-discovery), maar staan standaard verborgen in het dashboard.
+**Doel:** zoveel mogelijk **footage waarin de artiest zelf te zien is**, gepost door **andere accounts**: fans die een show filmen, venues, festivals, media, interviews en fanedits. Posts van de artiest zelf (status `own`) en video's die alleen zijn nummer gebruiken vallen erbuiten.
 
-**Ingest** (`src/lib/ingest.ts`, knop "Ingest + classificeer"):
-1. `/v1/tiktok/search` voor naam + aliassen en "songtitel + naam" (met `region` van de artist card, bv. `NL`)
+**Ingest** (`src/lib/ingest.ts`, knop "Ingest + classificeer"), search-first:
+1. `/v1/tiktok/search` met de `region` van de artist card (bv. `NL`) op:
+   - naam en aliassen;
+   - naam + contextwoorden (`SEARCH_MODIFIERS`: live, optreden, concert, show, festival, backstage, interview, podcast, meet and greet, tour);
+   - naam + songtitel en naam + collaborator;
+   - de extra zoekopdrachten van de card;
+   - de naam gesorteerd op nieuwste uploads.
 2. `/v1/tiktok/search/hashtags` per hashtag (leeg = afgeleid van naam/aliassen)
-3. `/v1/tiktok/profiles/{handle}/videos` voor de eigen accounts
-4. **Sound-discovery:** de sounds van de artiest zelf (releases waarvan de artiest als auteur staat, en zijn eigen "original sound"s) worden uit de eigen posts gehaald en aan `sound_ids` toegevoegd
-5. `/v1/tiktok/music/{clipId}/videos` per sound id: alle andere accounts die zijn nummers gebruiken
+3. `/v1/tiktok/profiles/{handle}/videos` voor **fanaccounts**: accounts die structureel footage posten. Het dashboard stelt ze voor op basis van eerdere resultaten.
+4. Optioneel (standaard uit): het eigen profiel en `/v1/tiktok/music/{clipId}/videos` voor zijn sounds. Sound-video's zijn in de praktijk vooral mensen die op het nummer dansen.
 
-Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI). Daarna wordt er ontdubbeld op video-id, worden de bronnen gemerged en de thumbnails direct naar Storage gecachet. Credits en statistieken worden per run gelogd in `ingest_runs`.
+Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI). Daarna wordt er ontdubbeld op video-id, worden de bronnen gemerged en de thumbnails direct naar Storage gecachet (HEIC wordt naar JPEG omgezet). Credits en statistieken worden per run gelogd in `ingest_runs`.
 
-**Classificatie** (`src/lib/classify/`) is een trechter. Elke laag schrijft rijen naar `classifications`; de view `video_status` kiest het effectieve oordeel (human > rules > llm):
-- **Laag 0 – regels:** geblokkeerd account of negatieve term → unrelated. Eigen account of eigen sound → relevant (confidence 1). Een getagde handle, songtitel of collaborator in de caption geeft een hint aan de LLM.
-- **Laag 1 – LLM:** caption, hashtags, auteur en sound gaan via een Zod-schema met structured output naar Claude Haiku (`ANTHROPIC_API_KEY`) of Gemini (`GEMINI_API_KEY`). Het model geeft `is_about_artist`, `confidence`, `content_type`, `usability` en `reason` terug. De duimpjes uit de UI dienen als few-shot voorbeelden.
-- **Routing:** relevance ≥ 0.85 → relevant, ≤ 0.3 → unrelated, daartussen → review.
+**Classificatie** (`src/lib/classify/`) is een trechter. Elke laag schrijft rijen naar `classifications`; de view `video_status` kiest het effectieve oordeel (human > rules > llm) en geeft posts van de eigen accounts status `own`:
+- **Laag 0 – regels:** geblokkeerd account of negatieve term → unrelated. Al het andere (tags, songtitels, collaborators, eigen sound, bekend fanaccount) gaat als hint naar de LLM.
+- **Laag 1 – LLM:** caption, hashtags, auteur en sound gaan via een Zod-schema met structured output naar Claude Haiku (`ANTHROPIC_API_KEY`) of Gemini (`GEMINI_API_KEY`). Het model schat **de kans dat de artiest in beeld is** en geeft daarnaast `content_type`, `usability` en `reason` terug. De duimpjes uit de UI dienen als few-shot voorbeelden.
+- **Routing:** kans ≥ 0.85 → relevant (footage), ≤ 0.3 → unrelated, daartussen → review.
 - **Een laag toevoegen:** voeg een stap toe in `classifyArtist`, plus de waarde in de check-constraint `layer` en in de prioriteit van de view.
 
-**Dashboard:** grid met filters op status, content_type, periode en sortering. De standaardweergave is "alles over de artiest": geen eigen posts en geen `sound_only` (video's waarin zijn nummer alleen als achtergrond dient). Beide kun je aanzetten. Klikken speelt de video af via de TikTok-embed; duim omhoog/omlaag slaat een human-classificatie op. "Download" roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
+**Dashboard:** tabs relevant/review/unrelated/own, met filters op content_type en periode en sortering. Verder:
+- suggesties voor fanaccounts (één klik om toe te voegen);
+- een tabel met de opbrengst per zoekopdracht, om zwakke zoektermen te schrappen;
+- afspelen via de TikTok-embed, duim omhoog/omlaag als human-classificatie;
+- "Download": roept `/v1/tiktok/videos/download` aan (11 credits), zet de mp4 in Storage en geeft een signed link terug. Een tweede klik gebruikt het opgeslagen bestand en kost geen credits.
 
 ## Onderhoud
 

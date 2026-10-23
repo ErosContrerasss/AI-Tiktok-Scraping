@@ -11,6 +11,7 @@ const STATUS_STYLE: Record<string, string> = {
   relevant: "bg-green-100 text-green-800",
   review: "bg-amber-100 text-amber-800",
   unrelated: "bg-zinc-200 text-zinc-600",
+  own: "bg-blue-100 text-blue-800",
   unclassified: "bg-zinc-100 text-zinc-500",
 };
 

@@ -9,10 +9,10 @@ export const CONTENT_TYPES = [
 ] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
-export const STATUSES = ["relevant", "review", "unrelated", "unclassified"] as const;
+export const STATUSES = ["relevant", "review", "unrelated", "own", "unclassified"] as const;
 export type Status = (typeof STATUSES)[number];
 
-export type SourceType = "search" | "hashtag" | "profile" | "sound";
+export type SourceType = "search" | "hashtag" | "fan_account" | "profile" | "sound";
 export type Source = { type: SourceType; query: string };
 
 export type Artist = {
@@ -26,6 +26,8 @@ export type Artist = {
   collaborators: string[];
   negative_terms: string[];
   blocked_accounts: string[];
+  fan_accounts: string[];
+  extra_queries: string[];
   notes: string;
   region: string | null;
   created_at: string;

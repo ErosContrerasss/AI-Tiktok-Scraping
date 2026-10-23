@@ -44,3 +44,9 @@ export function containsTerm(haystack: string, term: string): boolean {
   const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "u").test(haystack.toLowerCase());
 }
+
+// Truncate by code points so emoji/surrogate pairs are never split (a lone surrogate is invalid JSON).
+export function truncate(s: string, max: number): string {
+  const chars = Array.from(s);
+  return chars.length > max ? chars.slice(0, max).join("") : s;
+}

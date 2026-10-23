@@ -33,32 +33,51 @@ export type IngestStats = {
   credits: number;
 };
 
-// Phase 1: search, hashtags and own profiles. Phase 2 (sounds) runs after we
-// discovered the artist's sounds from their own posts.
-export function buildTasks(artist: Artist): Task[] {
+export type IngestOptions = {
+  maxPages?: number;
+  // Off by default: the goal is footage of the artist posted by OTHER accounts.
+  includeOwnProfile?: boolean; // fetch the artist's own posts (also needed for sound discovery)
+  includeSounds?: boolean; // videos using the artist's sounds (mostly people dancing to the song)
+};
+
+// Search first: the artist name combined with context words that surface footage
+// ("russo live", "russo optreden"), songs, collaborators and custom queries.
+export function buildTasks(artist: Artist, opts: IngestOptions = {}): Task[] {
   const names = uniq([artist.name, ...artist.aliases]);
-  // Song titles alone are too generic ("Ik Wil"), so pair them with the artist name.
-  const searchQueries = uniq([...names, ...artist.song_titles.map((t) => `${t} ${artist.name}`)]);
+  const region = artist.region ?? undefined;
+  const searchQueries = uniq([
+    ...names,
+    ...config.searchModifiers.map((m) => `${artist.name} ${m}`),
+    // Song titles and collaborators alone are too generic, so pair them with the name.
+    ...artist.song_titles.map((t) => `${artist.name} ${t}`),
+    ...artist.collaborators.map((c) => `${artist.name} ${c}`),
+    ...artist.extra_queries,
+  ]);
   const hashtags = uniq(
     (artist.hashtags.length ? artist.hashtags : names).map((h) => h.replace(/^#/, "").replace(/\s+/g, "")),
   );
+  const search = (q: string, sortBy?: "date-posted") => ({
+    type: "search" as const,
+    query: sortBy ? `${q} [recent]` : q,
+    fetchPage: (c?: string) => socialFetch.searchVideos(q, { cursor: c, region, sortBy }),
+  });
+  const profile = (type: "profile" | "fan_account", handle: string) => ({
+    type,
+    query: handle,
+    fetchPage: (c?: string) => socialFetch.profileVideos(handle, c),
+  });
 
   return [
-    ...searchQueries.map((q) => ({
-      type: "search" as const,
-      query: q,
-      fetchPage: (c?: string) => socialFetch.searchVideos(q, c, artist.region ?? undefined),
-    })),
+    ...searchQueries.map((q) => search(q)),
+    // Relevance ranking favours old viral videos; also pull the newest uploads.
+    ...names.map((n) => search(n, "date-posted")),
     ...hashtags.map((h) => ({
       type: "hashtag" as const,
       query: h,
       fetchPage: (c?: string) => socialFetch.searchHashtag(h, c),
     })),
-    ...uniq(artist.handles.map((h) => h.replace(/^@/, ""))).map((h) => ({
-      type: "profile" as const,
-      query: h,
-      fetchPage: (c?: string) => socialFetch.profileVideos(h, c),
-    })),
+    ...uniq(artist.fan_accounts).map((h) => profile("fan_account", h)),
+    ...(opts.includeOwnProfile ? uniq(artist.handles).map((h) => profile("profile", h)) : []),
   ];
 }
 
@@ -74,7 +93,6 @@ const MAX_DISCOVERED_SOUNDS = 15;
 
 // Sounds used on the artist's own posts that belong to the artist: their releases
 // ("BOEM! — Samuel Welten & Russo") or their original sounds ("original sound - russo_nl").
-// Other people using these sounds is the richest source of third-party content.
 export function discoverSounds(artist: Artist, videos: NormalizedVideo[]): { id: string; title: string | null }[] {
   const handles = artist.handles.map((h) => h.replace(/^@/, "").toLowerCase());
   const names = [artist.name, ...artist.aliases].map((n) => n.toLowerCase());
@@ -97,7 +115,7 @@ export function discoverSounds(artist: Artist, videos: NormalizedVideo[]): { id:
     .map(({ id, title }) => ({ id, title }));
 }
 
-export async function ingestArtist(artistId: string, opts: { maxPages?: number } = {}): Promise<IngestStats> {
+export async function ingestArtist(artistId: string, opts: IngestOptions = {}): Promise<IngestStats> {
   const maxPages = opts.maxPages ?? config.maxPages;
   const supabase = db();
 
@@ -112,13 +130,9 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
   const runId = run!.id as number;
 
   const found = new Map<string, { video: NormalizedVideo; sources: Source[] }>();
-  const perSourceIds: Record<SourceType, Set<string>> = {
-    search: new Set(),
-    hashtag: new Set(),
-    profile: new Set(),
-    sound: new Set(),
-  };
-  const perSourceFound: Record<SourceType, number> = { search: 0, hashtag: 0, profile: 0, sound: 0 };
+  const sourceTypes: SourceType[] = ["search", "hashtag", "fan_account", "profile", "sound"];
+  const perSourceIds = Object.fromEntries(sourceTypes.map((t) => [t, new Set<string>()])) as Record<SourceType, Set<string>>;
+  const perSourceFound = Object.fromEntries(sourceTypes.map((t) => [t, 0])) as Record<SourceType, number>;
 
   const runTask = async (task: Task): Promise<TaskStat> => {
     const stat: TaskStat = { type: task.type, query: task.query, pages: 0, found: 0, credits: 0 };
@@ -151,16 +165,18 @@ export async function ingestArtist(artistId: string, opts: { maxPages?: number }
     return stat;
   };
 
-  const taskStats = await mapLimit(buildTasks(artist), 4, runTask);
+  const taskStats = await mapLimit(buildTasks(artist, opts), 4, runTask);
 
-  // Remember discovered sounds on the artist card: the sound rule then marks
-  // every video using them as relevant, and the next run fetches them directly.
-  const discoveredSounds = discoverSounds(artist, [...found.values()].map((f) => f.video));
-  if (discoveredSounds.length) {
-    artist.sound_ids = [...artist.sound_ids, ...discoveredSounds.map((s) => s.id)];
-    await supabase.from("artists").update({ sound_ids: artist.sound_ids }).eq("id", artistId);
+  let discoveredSounds: { id: string; title: string | null }[] = [];
+  if (opts.includeSounds) {
+    // Needs the own profile in this run to find new sounds; known sound_ids are fetched regardless.
+    discoveredSounds = discoverSounds(artist, [...found.values()].map((f) => f.video));
+    if (discoveredSounds.length) {
+      artist.sound_ids = [...artist.sound_ids, ...discoveredSounds.map((s) => s.id)];
+      await supabase.from("artists").update({ sound_ids: artist.sound_ids }).eq("id", artistId);
+    }
+    taskStats.push(...(await mapLimit(soundTasks(artist.sound_ids), 4, runTask)));
   }
-  taskStats.push(...(await mapLimit(soundTasks(artist.sound_ids), 4, runTask)));
 
   // Merge with what's already stored: keep the original artist, first_seen_at and sources.
   const ids = [...found.keys()];

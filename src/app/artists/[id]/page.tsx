@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArtistForm } from "@/components/ArtistForm";
+import { FanAccountSuggestions } from "@/components/FanAccountSuggestions";
+import { QueryYieldTable } from "@/components/QueryYieldTable";
 import { RunPanel } from "@/components/RunPanel";
 import { VideoGrid, type GridVideo } from "@/components/VideoGrid";
 import { getArtist } from "@/lib/artists";
 import { llmProvider } from "@/lib/classify/llm";
 import { config } from "@/lib/env";
 import type { IngestStats } from "@/lib/ingest";
+import { queryYield, suggestFanAccounts } from "@/lib/suggestions";
 import { db, publicThumbUrl } from "@/lib/supabase";
 import { CONTENT_TYPES, STATUSES, type Status, type VideoStatusRow } from "@/lib/types";
 
@@ -20,7 +23,7 @@ const SORTS = {
   relevance: { column: "relevance", label: "Confidence" },
 } as const;
 
-type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string; own?: string };
+type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string };
 
 export default async function ArtistPage({
   params,
@@ -37,16 +40,9 @@ export default async function ArtistPage({
   const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as Status) : "relevant";
   const sortKey = (sp.sort && sp.sort in SORTS ? sp.sort : "views") as keyof typeof SORTS;
   const page = Math.max(1, Number(sp.page ?? 1));
-  // Default focus: content from other accounts. Own posts only on request.
-  const includeOwn = sp.own === "1";
-  const ownList = artist.handles.length ? `(${artist.handles.map((h) => `"${h}"`).join(",")})` : null;
-  // Default content type view: everything about the artist, i.e. without videos
-  // that merely use their song as background ("sound_only"). "all" shows those too.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase builder generics differ per select()
   const applyFilters = (q: any) => {
-    if (!includeOwn && ownList) q = q.not("author_handle", "in", ownList);
-    if (!sp.type) q = q.or("content_type.is.null,content_type.neq.sound_only");
-    else if (sp.type !== "all") q = q.eq("content_type", sp.type);
+    if (sp.type) q = q.eq("content_type", sp.type);
     if (sp.from) q = q.gte("posted_at", sp.from);
     if (sp.to) q = q.lte("posted_at", `${sp.to}T23:59:59Z`);
     return q;
@@ -63,7 +59,7 @@ export default async function ArtistPage({
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
   );
 
-  const [{ data: rows, count }, counts, { data: lastRun }] = await Promise.all([
+  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields] = await Promise.all([
     query,
     Promise.all(
       STATUSES.map(async (st) => {
@@ -75,6 +71,8 @@ export default async function ArtistPage({
     ).then((entries) => Object.fromEntries(entries) as Record<Status, number>),
     supabase.from("ingest_runs").select("stats").eq("artist_id", id).not("finished_at", "is", null)
       .order("started_at", { ascending: false }).limit(1).maybeSingle(),
+    suggestFanAccounts(artist),
+    queryYield(id),
   ]);
 
   const videos: GridVideo[] = ((rows ?? []) as VideoStatusRow[]).map((v) => ({
@@ -112,6 +110,9 @@ export default async function ArtistPage({
         llmReady={!!llmProvider()}
       />
 
+      <FanAccountSuggestions artistId={id} suggestions={suggestions} />
+      <QueryYieldTable rows={yields} />
+
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {STATUSES.map((s) => (
           <Link
@@ -129,8 +130,7 @@ export default async function ArtistPage({
         <label className="flex flex-col">
           <span className="text-xs text-zinc-500">content type</span>
           <select name="type" defaultValue={sp.type ?? ""} className="rounded-md border border-zinc-300 bg-white px-2 py-1">
-            <option value="">alles over de artiest (zonder sound_only)</option>
-            <option value="all">alle, incl. sound_only</option>
+            <option value="">alle</option>
             {CONTENT_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
@@ -153,10 +153,6 @@ export default async function ArtistPage({
               </option>
             ))}
           </select>
-        </label>
-        <label className="flex items-center gap-1.5 self-center">
-          <input type="checkbox" name="own" value="1" defaultChecked={includeOwn} />
-          ook eigen posts
         </label>
         <button className="rounded-md border border-zinc-300 bg-white px-3 py-1">Filter</button>
         <span className="text-zinc-500">{count ?? 0} video&apos;s</span>

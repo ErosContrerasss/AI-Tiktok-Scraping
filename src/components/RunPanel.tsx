@@ -10,6 +10,8 @@ type Props = { artistId: string; lastIngest: IngestStats | null; defaultMaxPages
 export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Props) {
   const router = useRouter();
   const [maxPages, setMaxPages] = useState(defaultMaxPages);
+  const [includeOwnProfile, setIncludeOwnProfile] = useState(false);
+  const [includeSounds, setIncludeSounds] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ingest, setIngest] = useState<IngestStats | null>(lastIngest);
@@ -28,7 +30,7 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
   async function runIngest() {
     setError(null);
     setBusy("Ingest loopt… (kan een paar minuten duren)");
-    const stats = await call<IngestStats>(`/api/artists/${artistId}/ingest`, { maxPages });
+    const stats = await call<IngestStats>(`/api/artists/${artistId}/ingest`, { maxPages, includeOwnProfile, includeSounds });
     if (stats) {
       setIngest(stats);
       await runClassify(false);
@@ -62,6 +64,14 @@ export function RunPanel({ artistId, lastIngest, defaultMaxPages, llmReady }: Pr
             onChange={(e) => setMaxPages(Number(e.target.value))}
             className="w-16 rounded-md border border-zinc-300 px-2 py-1"
           />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm" title="Eigen posts zijn nodig om nieuwe sounds van de artiest te ontdekken">
+          <input type="checkbox" checked={includeOwnProfile} onChange={(e) => setIncludeOwnProfile(e.target.checked)} />
+          eigen profiel
+        </label>
+        <label className="flex items-center gap-1.5 text-sm" title="Video's van anderen met zijn sound: vooral mensen die op het nummer dansen">
+          <input type="checkbox" checked={includeSounds} onChange={(e) => setIncludeSounds(e.target.checked)} />
+          sounds
         </label>
         <button onClick={() => runClassify(false)} disabled={!!busy} className="rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-50">
           Classificeer nieuwe
@@ -146,21 +156,16 @@ function ClassifySummary({ s }: { s: ClassifyStats }) {
     <div>
       <h3 className="font-medium">Classificatie</h3>
       <p className="text-zinc-600">
-        Regels: {s.rules.relevant} relevant, {s.rules.unrelated} unrelated · LLM ({s.provider ?? "geen"}): {s.llm.classified} gedaan
+        Regels: {s.rules.unrelated} uitgesloten · LLM ({s.provider ?? "geen"}): {s.llm.classified} gedaan
         {s.llm.failed ? `, ${s.llm.failed} mislukt` : ""}
       </p>
       <p className="mt-1">
-        <span className="text-green-700">{s.distribution.relevant} relevant</span> ·{" "}
+        <span className="text-green-700">{s.distribution.relevant} footage (relevant)</span> ·{" "}
         <span className="text-amber-700">{s.distribution.review} review</span> ·{" "}
         <span className="text-zinc-500">{s.distribution.unrelated} unrelated</span>
+        {` · ${s.distribution.own} eigen posts`}
         {s.distribution.unclassified ? ` · ${s.distribution.unclassified} ongeclassificeerd` : ""}
       </p>
-      {s.distributionOther && (
-        <p className="mt-1 text-xs text-zinc-600">
-          Andere accounts: {s.distributionOther.relevant} relevant · {s.distributionOther.review} review ·{" "}
-          {s.distributionOther.unrelated} unrelated
-        </p>
-      )}
       <p className="mt-1 text-xs text-zinc-500">
         {Object.entries(s.byContentType)
           .sort((a, b) => b[1] - a[1])

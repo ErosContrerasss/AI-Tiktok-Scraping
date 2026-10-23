@@ -6,6 +6,9 @@ import type { Artist, ContentType, Status, VideoRow } from "../types";
 import { classifyWithLlm, llmProvider, type FewShot } from "./llm";
 import { applyRules } from "./rules";
 
+// Goal: footage of the artist posted by OTHER accounts. Posts from the artist's own
+// accounts get status "own" in the view and skip classification.
+//
 // The funnel: rules (layer 0) → LLM (layer 1) → human (thumbs in the UI).
 // Each layer appends rows to `classifications`; the video_status view picks the
 // effective verdict (human > rules > llm). A new layer = a new step here plus a
@@ -13,11 +16,10 @@ import { applyRules } from "./rules";
 
 export type ClassifyStats = {
   provider: string | null;
-  rules: { relevant: number; unrelated: number };
+  rules: { unrelated: number };
   llm: { classified: number; failed: number; errors: string[] };
   distribution: Record<Status, number>;
-  distributionOther: Record<Status, number>; // excluding the artist's own accounts
-  byContentType: Record<string, number>;
+  byContentType: Record<string, number>; // relevant videos only
 };
 
 type VideoForClassify = Pick<
@@ -55,26 +57,24 @@ export async function classifyArtist(
 
   const stats: ClassifyStats = {
     provider: llmProvider()?.model ?? null,
-    rules: { relevant: 0, unrelated: 0 },
+    rules: { unrelated: 0 },
     llm: { classified: 0, failed: 0, errors: [] },
-    distribution: { relevant: 0, review: 0, unrelated: 0, unclassified: 0 },
-    distributionOther: { relevant: 0, review: 0, unrelated: 0, unclassified: 0 },
+    distribution: { relevant: 0, review: 0, unrelated: 0, own: 0, unclassified: 0 },
     byContentType: {},
   };
 
   const ruleRows: object[] = [];
   const llmQueue: { video: VideoForClassify; hints: string[] }[] = [];
+  const own = new Set(artist.handles);
   for (const v of videos) {
     const done = layers.get(v.id) ?? new Set();
-    if (done.has("human")) continue;
+    if (done.has("human") || own.has(v.author_handle ?? "")) continue;
     const { verdict, hints } = applyRules(artist, v);
     if (verdict && !done.has("rules")) {
       ruleRows.push({ video_id: v.id, layer: "rules", ...verdict });
-      if (verdict.is_about_artist) stats.rules.relevant++;
-      else stats.rules.unrelated++;
+      stats.rules.unrelated++;
     }
-    const ruledOut = (verdict && !verdict.is_about_artist) || rulesUnrelated.has(v.id);
-    // Rule-relevant videos still go to the LLM for content_type/usability.
+    const ruledOut = !!verdict || rulesUnrelated.has(v.id);
     if (!ruledOut && (opts.force || !done.has("llm"))) llmQueue.push({ video: v, hints });
   }
   for (const chunk of chunks(ruleRows, 300)) await supabase.from("classifications").insert(chunk);
@@ -84,7 +84,11 @@ export async function classifyArtist(
     const examples = await fewShotExamples(artistId);
     await mapLimit(queue, config.llmConcurrency, async ({ video, hints }) => {
       try {
-        const { model, ...verdict } = await classifyWithLlm(artist, { ...video, hints }, examples);
+        // One retry: rare malformed structured output or transient API errors.
+        const input = { ...video, hints };
+        const { model, ...verdict } = await classifyWithLlm(artist, input, examples).catch(() =>
+          classifyWithLlm(artist, input, examples),
+        );
         await supabase.from("classifications").insert({ video_id: video.id, layer: "llm", model, ...verdict });
         stats.llm.classified++;
       } catch (e) {
@@ -94,15 +98,14 @@ export async function classifyArtist(
     });
   }
 
-  const statuses = await selectAll<{ status: Status; content_type: ContentType | null; author_handle: string | null }>(
+  const statuses = await selectAll<{ status: Status; content_type: ContentType | null }>(
     "video_status",
-    "status, content_type, author_handle",
+    "status, content_type",
     artistId,
   );
   for (const s of statuses) {
     stats.distribution[s.status]++;
-    if (!artist.handles.includes(s.author_handle ?? "")) stats.distributionOther[s.status]++;
-    if (s.status !== "unrelated" && s.content_type)
+    if (s.status === "relevant" && s.content_type)
       stats.byContentType[s.content_type] = (stats.byContentType[s.content_type] ?? 0) + 1;
   }
   return stats;
@@ -123,10 +126,16 @@ async function fewShotExamples(artistId: string): Promise<FewShot[]> {
   return [...pick(true), ...pick(false)].map((r) => ({ ...r.videos, is_about_artist: r.is_about_artist }));
 }
 
-async function selectAll<T>(table: string, columns: string, artistId: string): Promise<T[]> {
+export async function selectAll<T>(table: string, columns: string, artistId: string): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db().from(table).select(columns).eq("artist_id", artistId).range(from, from + 999);
+    // A stable order is required: range() over an unordered query can skip or repeat rows.
+    const { data, error } = await db()
+      .from(table)
+      .select(columns)
+      .eq("artist_id", artistId)
+      .order("id")
+      .range(from, from + 999);
     if (error) throw new Error(error.message);
     out.push(...((data ?? []) as T[]));
     if (!data || data.length < 1000) return out;
