@@ -20,7 +20,8 @@ export function llmProvider(): Provider | null {
   return preferred === "gemini" ? (gemini ?? anthropic) : (anthropic ?? gemini);
 }
 
-type Request = { system: string; text: string; images?: Buffer[]; maxTokens?: number; effort?: "low" | "medium" };
+// `video` (mp4) is Gemini-only: Claude doesn't take video input.
+type Request = { system: string; text: string; images?: Buffer[]; video?: Buffer; maxTokens?: number; effort?: "low" | "medium" };
 
 let anthropicClient: Anthropic | null = null;
 let geminiClient: GoogleGenAI | null = null;
@@ -28,7 +29,11 @@ let geminiClient: GoogleGenAI | null = null;
 export async function generateStructured<S extends z.ZodType>(schema: S, req: Request): Promise<{ data: z.infer<S>; model: string }> {
   const provider = llmProvider();
   if (!provider) throw new Error("Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env.local");
-  const geminiModel = req.images?.length ? config.geminiVisionModel : config.geminiModel;
+  const geminiModel = req.images?.length || req.video ? config.geminiVisionModel : config.geminiModel;
+  if (req.video) {
+    if (!env.geminiKey()) throw new Error("Video input needs GEMINI_API_KEY");
+    return { data: await askGemini(schema, req, geminiModel), model: geminiModel };
+  }
   if (provider.name === "gemini") return { data: await askGemini(schema, req, geminiModel), model: geminiModel };
   try {
     return { data: await askAnthropic(schema, req, provider.model), model: provider.model };
@@ -79,6 +84,7 @@ async function askGemini<S extends z.ZodType>(schema: S, req: Request, model: st
       {
         role: "user",
         parts: [
+          ...(req.video ? [{ inlineData: { mimeType: "video/mp4", data: req.video.toString("base64") } }] : []),
           ...(req.images ?? []).map((img) => ({ inlineData: { mimeType: "image/jpeg", data: img.toString("base64") } })),
           { text: req.text },
         ],

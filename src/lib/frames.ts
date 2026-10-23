@@ -35,6 +35,23 @@ export async function grabFrames(video: VideoForFrames, count = FRAME_COUNT): Pr
   const stored = video.artist_id ? await loadStoredFrames(video.artist_id, video.id) : [];
   if (stored.length >= count) return { frames: pickEvenly(stored, count), credits: 0, stored: true };
 
+  const { mp4, credits } = await fetchVideoFile(video);
+  if (mp4) {
+    const frames = await extractFrames(mp4, video.duration_ms, Math.max(count, FRAME_COUNT));
+    if (video.artist_id) await storeFrames(video.artist_id, video.id, frames);
+    return { frames: pickEvenly(frames, count), credits, stored: false };
+  }
+  // Photo slideshows (and videos we can't fetch) fall back to the cached cover image.
+  const cover = await coverImage(video.thumbnail_cached_path);
+  if (cover) return { frames: [{ image: cover, atSeconds: null }], credits, stored: false };
+  throw new Error("Could not fetch video file or cover");
+}
+
+// The mp4 straight from TikTok's CDN (free); an expired link is refreshed via the
+// single-video lookup (1 credit) and the fresh link is saved for next time.
+export async function fetchVideoFile(
+  video: Pick<VideoForFrames, "id" | "url" | "raw">,
+): Promise<{ mp4: Buffer | null; credits: number }> {
   let credits = 0;
   let mp4 = await fetchMp4(video.raw?.media?.play);
   if (!mp4 && video.url) {
@@ -49,15 +66,7 @@ export async function grabFrames(video: VideoForFrames, count = FRAME_COUNT): Pr
         .eq("id", video.id);
     }
   }
-  if (mp4) {
-    const frames = await extractFrames(mp4, video.duration_ms, Math.max(count, FRAME_COUNT));
-    if (video.artist_id) await storeFrames(video.artist_id, video.id, frames);
-    return { frames: pickEvenly(frames, count), credits, stored: false };
-  }
-  // Photo slideshows (and videos we can't fetch) fall back to the cached cover image.
-  const cover = await coverImage(video.thumbnail_cached_path);
-  if (cover) return { frames: [{ image: cover, atSeconds: null }], credits, stored: false };
-  throw new Error("Could not fetch video file or cover");
+  return { mp4, credits };
 }
 
 function pickEvenly<T>(items: T[], count: number): T[] {

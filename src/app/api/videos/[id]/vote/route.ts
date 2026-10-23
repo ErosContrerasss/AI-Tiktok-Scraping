@@ -17,5 +17,7 @@ export const POST = handle(async (req, { params }: IdCtx) => {
     reason: up ? "Thumbs up" : "Thumbs down",
   });
   if (error) throw new Error(error.message);
+  // A video that turns out not to show the artist shouldn't shape the playbook.
+  if (!up) await db().from("video_breakdowns").delete().eq("video_id", (await params).id);
   return { ok: true };
 });

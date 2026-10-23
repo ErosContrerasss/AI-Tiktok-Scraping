@@ -50,6 +50,15 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - **Frames:** de frames-check bewaart frames in de privé-bucket `frames` (`{artist}/{video}/…`), zodat herclassificeren geen verlopen TikTok-links meer nodig heeft. Na de beoordeling worden frames van unrelated video's opgeruimd; alleen relevant en review blijven staan. Voor oudere runs: `scripts/prune-frames.ts <artistId>`.
 - **Opslag-interface:** alle media (thumbnails, frames, sheet-foto's, downloads) loopt via `src/lib/media.ts` (`media().put/get/list/remove/signedUrl`). Nu is dat Supabase Storage. Een S3-compatibele store zoals Cloudflare R2 (geen egress-kosten) is één extra klasse, gekozen met `MEDIA_STORE`.
 
+## Playbook
+
+Voorbereiding op het maken van video's: leren van wat al werkt (`src/lib/playbook.ts`).
+1. **Uitschieters:** de top 10% van de bruikbare clips op views per volger van de uploader, of op engagement (likes, comments, shares en saves per view). Alleen video's met minstens 2.000 views tellen mee. Volgers en een momentopname van de cijfers worden bij elke ingest bewaard (`video_stats`).
+2. **Ontleding:** Gemini bekijkt en beluistert elke uitschieter en legt de opbouw vast: format, hook, segmenten, tempo en knippen, tekst in beeld, deel van het nummer, en een recept om er een nieuwe video in die stijl van te maken.
+3. **Blauwdruk per format** (minstens 3 voorbeelden): typische lengte, hooks, opbouw, montage, tekst, audio, footage, wel/niet, en manieren om te variëren zodat elke video uniek is.
+
+Draaien kan in het dashboard ("Playbook bouwen") of met `scripts/playbook.ts <artistId>`. Kosten: ±$0,003 per video, en alleen credits als een TikTok-link verlopen is. Een duim omlaag bij een voorbeeld haalt het uit de blauwdruk.
+
 ## Nieuwe artiest
 
 Plak een TikTok-link bij "Nieuwe artiest" → "Card voorstellen" (`src/lib/bootstrap.ts`, ±5 credits). De tool haalt profiel, eigen posts en één zoekpagina op, en de AI vult naam, aliassen, regio, notitie, songs, collaborators, hashtags, negatieve termen en geblokkeerde accounts in. Controleer de card vóór het opslaan.

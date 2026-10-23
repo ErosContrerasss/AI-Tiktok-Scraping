@@ -4,12 +4,14 @@ import { ArtistForm } from "@/components/ArtistForm";
 import { FanAccountSuggestions } from "@/components/FanAccountSuggestions";
 import { QueryYieldTable } from "@/components/QueryYieldTable";
 import { ArtistSheet } from "@/components/ArtistSheet";
+import { PlaybookPanel } from "@/components/PlaybookPanel";
 import { RunPanel } from "@/components/RunPanel";
 import { VideoGrid, type GridVideo } from "@/components/VideoGrid";
 import { getArtist } from "@/lib/artists";
 import { llmProvider } from "@/lib/classify/llm";
 import { config } from "@/lib/env";
 import type { IngestStats } from "@/lib/ingest";
+import { loadPlaybookView } from "@/lib/playbook";
 import { queryYield, suggestFanAccounts } from "@/lib/suggestions";
 import { BUCKETS, media, publicThumbUrl } from "@/lib/media";
 import { db } from "@/lib/supabase";
@@ -61,7 +63,7 @@ export default async function ArtistPage({
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
   );
 
-  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, sheet] = await Promise.all([
+  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, sheet, playbooks] = await Promise.all([
     query,
     Promise.all(
       STATUSES.map(async (st) => {
@@ -81,6 +83,7 @@ export default async function ArtistPage({
         return { ...entry, url: url ?? "" };
       }),
     ),
+    loadPlaybookView(id),
   ]);
 
   const videos: GridVideo[] = ((rows ?? []) as VideoStatusRow[]).map((v) => ({
@@ -119,6 +122,7 @@ export default async function ArtistPage({
       />
 
       <ArtistSheet artistId={id} entries={sheet} traits={artist.traits} />
+      <PlaybookPanel artistId={id} playbooks={playbooks} />
       <FanAccountSuggestions artistId={id} suggestions={suggestions} />
       <QueryYieldTable rows={yields} />
 
