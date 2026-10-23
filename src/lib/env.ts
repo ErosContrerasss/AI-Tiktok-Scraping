@@ -1,0 +1,26 @@
+import "server-only";
+
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing env var ${name} (set it in .env.local)`);
+  return value;
+}
+
+export const env = {
+  socialFetchKey: () => required("SOCIALFETCH_API_KEY"),
+  supabaseUrl: () => required("NEXT_PUBLIC_SUPABASE_URL"),
+  supabaseServiceKey: () => required("SUPABASE_SERVICE_ROLE_KEY"),
+  anthropicKey: () => process.env.ANTHROPIC_API_KEY,
+  geminiKey: () => process.env.GEMINI_API_KEY,
+};
+
+export const config = {
+  // Max pages per query/hashtag/profile/sound during ingest (overridable per run).
+  maxPages: Number(process.env.INGEST_MAX_PAGES ?? 3),
+  // Routing thresholds; keep in sync with the video_status view.
+  relevantAt: 0.85,
+  unrelatedAt: 0.3,
+  llmConcurrency: Number(process.env.LLM_CONCURRENCY ?? 8),
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-haiku-5-5",
+  geminiModel: process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite",
+};
