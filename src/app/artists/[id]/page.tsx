@@ -25,7 +25,7 @@ const SORTS = {
   likes: { column: "likes", label: "Likes" },
   posted_at: { column: "posted_at", label: "Nieuwste" },
   relevance: { column: "relevance", label: "Confidence" },
-  clean_seconds: { column: "clean_seconds", label: "Meeste schone seconden" },
+  usable_seconds: { column: "usable_seconds", label: "Meeste bruikbare seconden" },
 } as const;
 
 type Search = { status?: string; type?: string; from?: string; to?: string; sort?: string; page?: string; clean?: string };
@@ -45,7 +45,7 @@ export default async function ArtistPage({
   const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as Status) : "relevant";
   // "Schone fragmenten": usable videos with stretches of the artist on screen without overlaid text.
   const clean = status === "relevant" && sp.clean === "1";
-  const sortKey = (sp.sort && sp.sort in SORTS && (clean || sp.sort !== "clean_seconds") ? sp.sort : "views") as keyof typeof SORTS;
+  const sortKey = (sp.sort && sp.sort in SORTS && (clean || sp.sort !== "usable_seconds") ? sp.sort : "views") as keyof typeof SORTS;
   const page = Math.max(1, Number(sp.page ?? 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase builder generics differ per select()
   const applyFilters = (q: any) => {
