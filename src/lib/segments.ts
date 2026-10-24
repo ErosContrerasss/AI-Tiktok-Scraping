@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import ffmpegStatic from "ffmpeg-static";
 import { selectAll } from "./classify";
-import { classifyFramesWithJev, faceCutWithJev, textLevelsWithJev, textPositionsWithJev } from "./classify/jev";
+import { classifyFramesWithJev, faceCutWithJev, textLayoutWithJev, textLevelsWithJev, textPositionsWithJev, type FracBox } from "./classify/jev";
 import { ffmpegImage, toJevImage } from "./images";
 import { loadStoredFrames, type Frame } from "./frames";
 import { db } from "./supabase";
@@ -31,9 +31,11 @@ const BLACK_YAVG = 16; // mean luma below this = black frame
 const MIN_SEGMENT_S = 2;
 const BARS_MAX_CONTENT = 0.9; // content area under 90% of the height or width = black bars
 
-export type Segment = { start_s: number; end_s: number; artist_p: number };
+// inpaint: the fragment has small text that can be painted out (e.g. LaMa/STTN in
+// video-subtitle-remover); text_box is where, as fractions of the (cropped) picture.
+export type Segment = { start_s: number; end_s: number; artist_p: number; inpaint?: boolean; text_box?: FracBox };
 type Crop = { x: number; y: number; w: number; h: number };
-type FrameResult = { at_seconds: number | null; artist_p: number; text_level: number };
+type FrameResult = { at_seconds: number | null; artist_p: number; text_level: number; inpaint?: FracBox };
 type Pixels = { yavg: number; crop: Crop | null };
 
 // One ffmpeg pass over the stored frames: mean luma and the non-black content box per frame.
@@ -221,17 +223,19 @@ function commonCrop(pixels: Pixels[]): Crop | null {
 export function findSegments(results: FrameResult[], pixels: (Pixels | undefined)[], durationS: number): Segment[] {
   const step = durationS / Math.max(results.length, 1);
   const segments: Segment[] = [];
-  let current: { start: number; end: number; ps: number[] } | null = null;
+  let current: Run | null = null;
   results.forEach((f, i) => {
     const at = f.at_seconds ?? step * (i + 0.5);
-    const ok = f.artist_p >= ARTIST_MIN && f.text_level < TEXT_MAX && (pixels[i]?.yavg ?? 255) >= BLACK_YAVG;
+    const ok = f.artist_p >= ARTIST_MIN && (f.text_level < TEXT_MAX || !!f.inpaint) && (pixels[i]?.yavg ?? 255) >= BLACK_YAVG;
     if (ok) {
       const start = Math.max(0, at - step / 2);
       const end = Math.min(durationS, at + step / 2);
+      const box = f.text_level >= TEXT_MAX ? f.inpaint : undefined;
       if (current) {
         current.end = end;
         current.ps.push(f.artist_p);
-      } else current = { start, end, ps: [f.artist_p] };
+        if (box) current.box = current.box ? union(current.box, box) : box;
+      } else current = { start, end, ps: [f.artist_p], box };
     } else if (current) {
       segments.push(toSegment(current));
       current = null;
@@ -241,11 +245,43 @@ export function findSegments(results: FrameResult[], pixels: (Pixels | undefined
   return segments.filter((s) => s.end_s - s.start_s >= MIN_SEGMENT_S);
 }
 
-const toSegment = (c: { start: number; end: number; ps: number[] }): Segment => ({
+type Run = { start: number; end: number; ps: number[]; box?: FracBox };
+
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+const union = (a: FracBox, b: FracBox): FracBox => ({
+  top: Math.min(a.top, b.top),
+  bottom: Math.max(a.bottom, b.bottom),
+  left: Math.min(a.left, b.left),
+  right: Math.max(a.right, b.right),
+});
+
+const toSegment = (c: Run): Segment => ({
   start_s: Math.round(c.start * 10) / 10,
   end_s: Math.round(c.end * 10) / 10,
   artist_p: Math.round((c.ps.reduce((a, b) => a + b, 0) / c.ps.length) * 100) / 100,
+  ...(c.box
+    ? { inpaint: true, text_box: { top: round3(c.box.top), bottom: round3(c.box.bottom), left: round3(c.box.left), right: round3(c.box.right) } }
+    : {}),
 });
+
+const INPAINT_MAX_AREA = 0.1; // share of the picture the text may cover to paint it out
+const INPAINT_MAX_AREA_BUSY = 0.05; // stricter over a detailed background (lights, people)
+const FACE_MARGIN = 0.02;
+
+// Paint out or cut? Small text, off the face, gets painted out; anything bigger, or text over
+// the artist's face, means the frame is cut. Union boxes around several text blocks come out
+// large, so mixed cases fall on the safe side (cut rather than a smeared inpaint).
+function inpaintBox(l: Awaited<ReturnType<typeof textLayoutWithJev>>): FracBox | undefined {
+  const t = l.text;
+  const area = Math.max(0, t.right - t.left) * Math.max(0, t.bottom - t.top);
+  if (area <= 0) return undefined;
+  if (area > (l.busy >= 0.6 ? INPAINT_MAX_AREA_BUSY : INPAINT_MAX_AREA)) return undefined;
+  const f = l.face;
+  const overlapsFace =
+    l.hasFace >= 0.5 &&
+    t.left < f.right + FACE_MARGIN && t.right > f.left - FACE_MARGIN && t.top < f.bottom + FACE_MARGIN && t.bottom > f.top - FACE_MARGIN;
+  return overlapsFace ? undefined : t;
+}
 
 // Text level of each stored frame after cropping to the content area (one Jev request).
 async function textAfterCrop(stored: Frame[], crop: Crop): Promise<number[]> {
@@ -264,6 +300,8 @@ export type SegmentStats = {
   withBars: number;
   recropped: number; // videos whose text was re-measured after cropping the bars
   edgeCropped: number; // videos where cutting a caption strip off the top/bottom gave clean footage
+  inpaintable: number; // videos with fragments that need small text painted out
+  inpaintMinutes: number;
   skipped: number;
 };
 
@@ -299,7 +337,7 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
     for (const c of data ?? []) if (!details.has(c.video_id)) details.set(c.video_id, c.details.frames);
   }
 
-  const stats: SegmentStats = { videos: 0, withSegments: 0, segments: 0, cleanMinutes: 0, withBars: 0, recropped: 0, edgeCropped: 0, skipped: 0 };
+  const stats: SegmentStats = { videos: 0, withSegments: 0, segments: 0, cleanMinutes: 0, withBars: 0, recropped: 0, edgeCropped: 0, inpaintable: 0, inpaintMinutes: 0, skipped: 0 };
   await mapLimit(todo, 6, async (v) => {
     const results = details.get(v.id);
     if (!results?.length || !v.duration_ms) {
@@ -333,7 +371,8 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
         stats.recropped++;
       }
     }
-    let segments = findSegments(measured, pixels, durationS);
+    let final = measured;
+    let segments = findSegments(final, pixels, durationS);
     let finalCrop: Crop | null = crop;
     let cropKind: "bars" | "edge" | null = crop ? "bars" : null;
     // A caption strip over the top or bottom: cut it off when that gives more clean footage.
@@ -342,6 +381,7 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
       if (edge) {
         const edgeSegments = findSegments(edge.results, pixels, durationS);
         if (seconds(edgeSegments) > seconds(segments)) {
+          final = edge.results;
           segments = edgeSegments;
           finalCrop = { x: 0, y: edge.top, w: 1, h: Math.round((1 - edge.top - edge.bottom) * 1000) / 1000 };
           cropKind = "edge";
@@ -349,12 +389,34 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
         }
       }
     }
-    const cleanSeconds = Math.round(seconds(segments) * 10) / 10;
+    // Frames with the artist but still text on them: small enough to paint out?
+    const texty = final.map((r, i) => (r.artist_p >= ARTIST_MIN && r.text_level >= TEXT_MAX ? i : -1)).filter((i) => i >= 0);
+    if (texty.length && stored.length) {
+      const cropFilter = finalCrop
+        ? `crop=iw*${finalCrop.w.toFixed(4)}:ih*${finalCrop.h.toFixed(4)}:iw*${finalCrop.x.toFixed(4)}:ih*${finalCrop.y.toFixed(4)}`
+        : null;
+      const boxes = new Map<number, FracBox | undefined>();
+      await mapLimit(texty, 4, async (i) => {
+        const raw = stored[storedIndex[i]].image;
+        const img = await toJevImage(cropFilter ? await ffmpegImage(raw, cropFilter) : raw);
+        boxes.set(i, await textLayoutWithJev(img).then(inpaintBox).catch(() => undefined));
+      });
+      const withInpaint = final.map((r, i) => (boxes.get(i) ? { ...r, inpaint: boxes.get(i) } : r));
+      const inpaintSegments = findSegments(withInpaint, pixels, durationS);
+      if (seconds(inpaintSegments) > seconds(segments)) {
+        segments = inpaintSegments;
+        stats.inpaintable++;
+      }
+    }
+    const usableSeconds = Math.round(seconds(segments) * 10) / 10;
+    const cleanSeconds = Math.round(seconds(segments.filter((s) => !s.inpaint)) * 10) / 10;
+    stats.inpaintMinutes += (usableSeconds - cleanSeconds) / 60;
     await supabase.from("video_segments").upsert({
       video_id: v.id,
       artist_id: artistId,
       duration_s: durationS,
       clean_seconds: cleanSeconds,
+      usable_seconds: usableSeconds,
       segments,
       crop: finalCrop,
       crop_kind: cropKind,
@@ -369,5 +431,6 @@ export async function segmentArtist(artistId: string, opts: { force?: boolean } 
     stats.cleanMinutes += cleanSeconds / 60;
   });
   stats.cleanMinutes = Math.round(stats.cleanMinutes);
+  stats.inpaintMinutes = Math.round(stats.inpaintMinutes);
   return stats;
 }

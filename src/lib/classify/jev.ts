@@ -1,5 +1,5 @@
 import "server-only";
-import { choice, image, noul, score, TypeSafeClient } from "@typesafe-ai/sdk";
+import { box, choice, image, noul, score, TypeSafeClient } from "@typesafe-ai/sdk";
 import type { Artist, ContentType, Verdict } from "../types";
 import { truncate } from "../util";
 import type { FewShot, LlmInput } from "./llm";
@@ -272,4 +272,36 @@ export async function faceCutWithJev(images: Buffer[]): Promise<number[]> {
   );
   const answers = response.answers as Record<string, { noul?: number }>;
   return images.map((_, i) => answers[`cut_${i}`]?.noul ?? 0);
+}
+
+export type FracBox = { top: number; bottom: number; left: number; right: number };
+export type TextLayout = { hasText: number; text: FracBox; hasFace: number; face: FracBox; busy: number };
+
+// Where the overlaid text and the main face sit in one image, to decide between painting the
+// text out (small, off the face, calm background) and cutting the frame. One request per
+// image: a Box question locates something in *the* image of its request (Jev 1.14).
+export async function textLayoutWithJev(img: Buffer): Promise<TextLayout> {
+  client ??= new TypeSafeClient({ defaultModel: JEV_MODEL });
+  const response = await client.systemOne(
+    {
+      model: "jev-preview",
+      state: { photo: image(img) },
+      questions: {
+        hastext: noul("Is overlaid text, a caption, sticker or emoji added on top of `photo` (not text that is part of the scene, and not a small watermark or username in a corner)?"),
+        text: box("all overlaid text, captions, stickers and emojis on `photo` together, in one box"),
+        hasface: noul("Is a human face visible in `photo`?"),
+        face: box("the face of the most prominent person in `photo`"),
+        busy: noul("Is the picture behind the overlaid text detailed (faces, people, patterns, bright lights) rather than plain (sky, wall, dark area)?"),
+      },
+    },
+    { headers: { "TypeSafe-Danger-Zone-Images": "true" } },
+  );
+  const a = response.answers as unknown as {
+    hastext: { noul: number };
+    text: { box: FracBox };
+    hasface: { noul: number };
+    face: { box: FracBox };
+    busy: { noul: number };
+  };
+  return { hasText: a.hastext.noul, text: a.text.box, hasFace: a.hasface.noul, face: a.face.box, busy: a.busy.noul };
 }

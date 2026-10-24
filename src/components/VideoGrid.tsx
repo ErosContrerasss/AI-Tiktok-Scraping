@@ -6,7 +6,7 @@ import type { VideoStatusRow } from "@/lib/types";
 import { formatCount } from "@/lib/util";
 
 export type CleanInfo = {
-  segments: { start_s: number; end_s: number; artist_p: number }[];
+  segments: { start_s: number; end_s: number; artist_p: number; inpaint?: boolean }[];
   clean_seconds: number;
   aspect: number | null;
   crop: { x: number; y: number; w: number; h: number } | null;
@@ -96,8 +96,8 @@ function VideoCard({ v, onPlay }: { v: GridVideo; onPlay: () => void }) {
           {v.layer === "vision" ? " · 👁 frames gecheckt" : ""}
         </div>
         {v.clean && v.clean.segments.length > 0 && (
-          <div className="text-emerald-700" title="Fragmenten met de artiest in beeld, zonder tekst of overlays">
-            ✂ {v.clean.segments.map((s) => `${fmt(s.start_s)}–${fmt(s.end_s)}`).join(" · ")}
+          <div className="text-emerald-700" title="Fragmenten met de artiest in beeld, zonder tekst of overlays. 🖌 = kleine tekst die met inpainting (LaMa/STTN) weggepoetst kan worden">
+            ✂ {v.clean.segments.map((s) => `${fmt(s.start_s)}–${fmt(s.end_s)}${s.inpaint ? " 🖌" : ""}`).join(" · ")}
             {v.clean.aspect && v.clean.aspect > 0.7 ? ` · ${v.clean.aspect > 1.2 ? "liggend" : "vierkant"}` : ""}
             {v.clean.crop_kind === "bars" ? " · balken wegsnijden" : ""}
             {v.clean.crop_kind === "edge" && v.clean.crop
