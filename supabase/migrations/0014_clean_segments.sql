@@ -9,6 +9,7 @@ create table video_segments (
   clean_seconds real not null default 0, -- total length of the segments
   segments jsonb not null default '[]',  -- [{start_s, end_s, artist_p}]
   crop jsonb,                            -- content area as fractions {x, y, w, h} when there are black bars
+  crop_kind text check (crop_kind in ('bars', 'edge')), -- bars: black bars; edge: a caption strip cut off the top/bottom
   aspect real,                           -- width / height of the source (0.56 = vertical 9:16, 1 = square, 1.78 = landscape)
   is_edit boolean not null default false, -- already a montage of other footage (fan edit)
   analysed_at timestamptz not null default now()

@@ -232,3 +232,44 @@ export async function textLevelsWithJev(images: Buffer[]): Promise<number[]> {
   const answers = response.answers as Record<string, { score?: number }>;
   return images.map((_, i) => answers[`text_${i}`]?.score ?? 0);
 }
+
+const TEXT_POSITIONS = {
+  none: "No overlaid text, stickers or emojis (a small watermark in a corner doesn't count)",
+  top: "Overlaid text only in the top quarter of the image",
+  bottom: "Overlaid text only in the bottom quarter of the image",
+  top_and_bottom: "Overlaid text in the top quarter and in the bottom quarter, nothing in between",
+  middle: "Overlaid text in the middle of the image (between the top and bottom quarter)",
+};
+export type TextPosition = keyof typeof TEXT_POSITIONS;
+
+// Where the overlaid text sits in each image, to see if cropping an edge would remove it.
+export async function textPositionsWithJev(images: Buffer[]): Promise<TextPosition[]> {
+  client ??= new TypeSafeClient({ defaultModel: JEV_MODEL });
+  const response = await client.systemOne(
+    {
+      state: { frames: images.map((img) => image(img)) },
+      questions: Object.fromEntries(
+        images.map((_, i) => [`position_${i}`, choice(`Where is overlaid text (captions, stickers, emojis) in \`frames[${i}]\`?`, TEXT_POSITIONS)]),
+      ),
+    },
+    { headers: { "TypeSafe-Danger-Zone-Images": "true" } },
+  );
+  const answers = response.answers as Record<string, { choice?: string }>;
+  return images.map((_, i) => (answers[`position_${i}`]?.choice ?? "middle") as TextPosition);
+}
+
+// Per image: is a person's face cut off by the top or bottom edge (after cropping)?
+export async function faceCutWithJev(images: Buffer[]): Promise<number[]> {
+  client ??= new TypeSafeClient({ defaultModel: JEV_MODEL });
+  const response = await client.systemOne(
+    {
+      state: { frames: images.map((img) => image(img)) },
+      questions: Object.fromEntries(
+        images.map((_, i) => [`cut_${i}`, noul(`Is the face of the main person in \`frames[${i}]\` cut off by the top or bottom edge of the image?`)]),
+      ),
+    },
+    { headers: { "TypeSafe-Danger-Zone-Images": "true" } },
+  );
+  const answers = response.answers as Record<string, { noul?: number }>;
+  return images.map((_, i) => answers[`cut_${i}`]?.noul ?? 0);
+}

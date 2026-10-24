@@ -10,6 +10,7 @@ export type CleanInfo = {
   clean_seconds: number;
   aspect: number | null;
   crop: { x: number; y: number; w: number; h: number } | null;
+  crop_kind: "bars" | "edge" | null;
 };
 export type GridVideo = VideoStatusRow & { thumb: string | null; clean: CleanInfo | null };
 
@@ -98,7 +99,10 @@ function VideoCard({ v, onPlay }: { v: GridVideo; onPlay: () => void }) {
           <div className="text-emerald-700" title="Fragmenten met de artiest in beeld, zonder tekst of overlays">
             ✂ {v.clean.segments.map((s) => `${fmt(s.start_s)}–${fmt(s.end_s)}`).join(" · ")}
             {v.clean.aspect && v.clean.aspect > 0.7 ? ` · ${v.clean.aspect > 1.2 ? "liggend" : "vierkant"}` : ""}
-            {v.clean.crop ? " · balken" : ""}
+            {v.clean.crop_kind === "bars" ? " · balken wegsnijden" : ""}
+            {v.clean.crop_kind === "edge" && v.clean.crop
+              ? ` · ${v.clean.crop.y > 0 ? "boven" : ""}${v.clean.crop.y > 0 && v.clean.crop.y + v.clean.crop.h < 0.999 ? "+" : ""}${v.clean.crop.y + v.clean.crop.h < 0.999 ? "onder" : ""} bijsnijden (zoom ${(1 / v.clean.crop.h).toFixed(2).replace(".", ",")}×)`
+              : ""}
           </div>
         )}
         <p className="line-clamp-2 text-zinc-500" title={`${v.caption ?? ""}\n\n${v.layer ?? ""}: ${v.reason ?? ""}`}>
