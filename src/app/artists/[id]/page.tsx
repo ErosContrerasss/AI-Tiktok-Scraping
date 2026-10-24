@@ -90,7 +90,7 @@ export default async function ArtistPage({
   ]);
 
   const { data: segmentRows } = rows?.length
-    ? await supabase.from("video_segments").select("video_id, segments, clean_seconds, aspect, crop, crop_kind").in("video_id", (rows as { id: string }[]).map((r) => r.id))
+    ? await supabase.from("video_segments").select("video_id, segments, clean_seconds, aspect, crop, crop_kind, refined_at, quality, effective_height").in("video_id", (rows as { id: string }[]).map((r) => r.id))
     : { data: [] };
   const segmentsOf = new Map((segmentRows ?? []).map((s) => [s.video_id, s]));
   const videos: GridVideo[] = ((rows ?? []) as VideoStatusRow[]).map((v) => ({

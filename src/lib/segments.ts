@@ -34,8 +34,8 @@ const BARS_MAX_CONTENT = 0.9; // content area under 90% of the height or width =
 // inpaint: the fragment has small text that can be painted out (e.g. LaMa/STTN in
 // video-subtitle-remover); text_box is where, as fractions of the (cropped) picture.
 export type Segment = { start_s: number; end_s: number; artist_p: number; inpaint?: boolean; text_box?: FracBox };
-type Crop = { x: number; y: number; w: number; h: number };
-type FrameResult = { at_seconds: number | null; artist_p: number; text_level: number; inpaint?: FracBox };
+export type Crop = { x: number; y: number; w: number; h: number };
+export type FrameResult = { at_seconds: number | null; artist_p: number; text_level: number; inpaint?: FracBox };
 type Pixels = { yavg: number; crop: Crop | null };
 
 // One ffmpeg pass over the stored frames: mean luma and the non-black content box per frame.
