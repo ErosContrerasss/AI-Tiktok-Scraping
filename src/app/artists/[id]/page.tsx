@@ -4,6 +4,7 @@ import { ArtistForm } from "@/components/ArtistForm";
 import { FanAccountSuggestions } from "@/components/FanAccountSuggestions";
 import { QueryYieldTable } from "@/components/QueryYieldTable";
 import { ArtistSheet } from "@/components/ArtistSheet";
+import { LookalikePanel } from "@/components/LookalikePanel";
 import { PlaybookPanel } from "@/components/PlaybookPanel";
 import { RunPanel } from "@/components/RunPanel";
 import { VideoGrid, type GridVideo } from "@/components/VideoGrid";
@@ -11,6 +12,7 @@ import { getArtist } from "@/lib/artists";
 import { llmProvider } from "@/lib/classify/llm";
 import { config } from "@/lib/env";
 import type { IngestStats } from "@/lib/ingest";
+import { listLookalikes } from "@/lib/lookalikes";
 import { loadPlaybookView } from "@/lib/playbook";
 import { queryYield, suggestFanAccounts } from "@/lib/suggestions";
 import { BUCKETS, media, publicThumbUrl } from "@/lib/media";
@@ -66,7 +68,7 @@ export default async function ArtistPage({
     .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
   );
 
-  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, sheet, playbooks] = await Promise.all([
+  const [{ data: rows, count }, counts, { data: lastRun }, suggestions, yields, sheet, playbooks, lookalikeRows] = await Promise.all([
     query,
     Promise.all(
       STATUSES.map(async (st) => {
@@ -87,7 +89,20 @@ export default async function ArtistPage({
       }),
     ),
     loadPlaybookView(id),
+    listLookalikes(id),
   ]);
+  const lookalikes = await Promise.all(
+    lookalikeRows.map(async (l) => ({
+      id: l.id,
+      name: l.name,
+      tiktok_handle: l.tiktok_handle,
+      status: l.status,
+      reason: l.evidence.reason ?? null,
+      stats: l.stats,
+      blocked_accounts: l.blocked_accounts,
+      photos: (await Promise.all(l.sheet.slice(0, 4).map((e) => media().signedUrl(BUCKETS.sheets, e.path, 3600)))).filter((u): u is string => !!u),
+    })),
+  );
 
   const { data: segmentRows } = rows?.length
     ? await supabase.from("video_segments").select("video_id, segments, clean_seconds, aspect, crop, crop_kind, refined_at, quality, effective_height").in("video_id", (rows as { id: string }[]).map((r) => r.id))
@@ -130,6 +145,7 @@ export default async function ArtistPage({
       />
 
       <ArtistSheet artistId={id} entries={sheet} traits={artist.traits} />
+      <LookalikePanel lookalikes={lookalikes} />
       <PlaybookPanel artistId={id} playbooks={playbooks} />
       <FanAccountSuggestions artistId={id} suggestions={suggestions} />
       <QueryYieldTable rows={yields} />

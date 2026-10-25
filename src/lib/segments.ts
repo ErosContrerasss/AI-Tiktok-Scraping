@@ -305,19 +305,20 @@ export type SegmentStats = {
   skipped: number;
 };
 
-export async function segmentArtist(artistId: string, opts: { force?: boolean } = {}): Promise<SegmentStats> {
+export async function segmentArtist(artistId: string, opts: { force?: boolean; videoIds?: string[] } = {}): Promise<SegmentStats> {
   const supabase = db();
   const statuses = await selectAll<{ id: string; status: Status; content_type: string | null; duration_ms: number | null }>(
     "video_status",
     "id, status, content_type, duration_ms",
     artistId,
   );
-  const usable = statuses.filter((s) => s.status === "relevant");
+  const only = opts.videoIds ? new Set(opts.videoIds) : null;
+  const usable = statuses.filter((s) => s.status === "relevant" && (!only || only.has(s.id)));
   const { data: artist } = await supabase.from("artists").select("*").eq("id", artistId).single<Artist>();
   const sheet = artist ? await loadSheet(artist) : [];
 
   const done = new Set<string>();
-  if (!opts.force) {
+  if (!opts.force && !only) {
     for (const chunk of chunks(usable.map((v) => v.id), 300)) {
       const { data } = await supabase.from("video_segments").select("video_id").in("video_id", chunk);
       for (const r of data ?? []) done.add(r.video_id);

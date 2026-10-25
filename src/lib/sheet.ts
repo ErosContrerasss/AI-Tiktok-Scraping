@@ -297,9 +297,10 @@ const TraitsSchema = z.object({
     ),
 });
 
-export async function buildArtistSheet(artist: Artist): Promise<SheetResult> {
-  const supabase = db();
-  const { candidates, credits, instagramHandle, spotifyUrl } = await collectCandidates(artist);
+// Photos of one person, labelled and sorted into slots, plus a short description of their
+// visual traits. Used for the artist and for look-alikes (stored separately).
+export async function composeSheet(subject: Artist, pathPrefix: string, oldPaths: string[] = []) {
+  const { candidates, credits, instagramHandle, spotifyUrl } = await collectCandidates(subject);
   if (!candidates.length) throw new Error("Geen foto's gevonden voor het artist sheet");
   const labelled = await label(candidates);
   const person = await pickArtist(labelled);
@@ -314,24 +315,13 @@ export async function buildArtistSheet(artist: Artist): Promise<SheetResult> {
   }).catch(() => ({ data: { traits: "" } }));
 
   // Replace the previous sheet.
-  const old = (artist.artist_sheet ?? []).map((e) => e.path);
-  if (old.length) await media().remove(BUCKETS.sheets, old);
+  if (oldPaths.length) await media().remove(BUCKETS.sheets, oldPaths);
   const stamp = Date.now();
   const entries: SheetEntry[] = [];
   for (const [n, f] of filled.entries()) {
-    const path = `${artist.id}/sheet_${stamp}_${n}_${f.slot}.jpg`;
+    const path = `${pathPrefix}/sheet_${stamp}_${n}_${f.slot}.jpg`;
     if (await media().put(BUCKETS.sheets, path, f.image, "image/jpeg")) entries.push({ slot: f.slot, path, source: f.source });
   }
-  await supabase
-    .from("artists")
-    .update({
-      artist_sheet: entries,
-      traits: traits.traits,
-      instagram_handle: artist.instagram_handle ?? instagramHandle,
-      spotify_url: artist.spotify_url ?? spotifyUrl,
-    })
-    .eq("id", artist.id);
-
   const sources: Record<string, number> = {};
   for (const c of candidates) sources[c.source] = (sources[c.source] ?? 0) + 1;
   return {
@@ -346,9 +336,24 @@ export async function buildArtistSheet(artist: Artist): Promise<SheetResult> {
   };
 }
 
+export async function buildArtistSheet(artist: Artist): Promise<SheetResult> {
+  const result = await composeSheet(artist, artist.id, (artist.artist_sheet ?? []).map((e) => e.path));
+  const { entries, traits, instagramHandle, spotifyUrl } = result;
+  await db()
+    .from("artists")
+    .update({
+      artist_sheet: entries,
+      traits,
+      instagram_handle: artist.instagram_handle ?? instagramHandle,
+      spotify_url: artist.spotify_url ?? spotifyUrl,
+    })
+    .eq("id", artist.id);
+  return result;
+}
+
 export type SheetImage = { label: string; image: Buffer };
 
-export async function loadSheet(artist: Artist): Promise<SheetImage[]> {
+export async function loadSheet(artist: Pick<Artist, "artist_sheet">): Promise<SheetImage[]> {
   const out: SheetImage[] = [];
   for (const entry of artist.artist_sheet ?? []) {
     const image = await media().get(BUCKETS.sheets, entry.path);

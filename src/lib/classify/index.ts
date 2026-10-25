@@ -22,7 +22,7 @@ export type ClassifyStats = {
   provider: string | null;
   rules: { unrelated: number };
   llm: { classified: number; failed: number; errors: string[] };
-  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[]; framesPruned?: number; withFragments?: number };
+  vision: { mode?: string; checked: number; failed: number; credits: number; errors: string[]; framesPruned?: number; withFragments?: number; lookalikes?: string[] };
   distribution: Record<Status, number>;
   byContentType: Record<string, number>; // relevant videos only
 };
@@ -129,7 +129,15 @@ export async function classifyArtist(
   if (opts.vision && stats.provider) {
     const keep = new Set(statuses.filter((s) => s.status === "relevant" || s.status === "review").map((s) => s.id));
     stats.vision.framesPruned = await pruneFrames(artistId, keep);
-    // Clean fragments for new usable videos (dynamic import: segments.ts uses selectAll from here).
+    // Look-alikes: find them and check suspect videos with both photo sets (dynamic imports:
+    // these modules use selectAll from here). A failure here doesn't fail the run.
+    const { runLookalikes } = await import("../lookalikes");
+    const lookalikes = await runLookalikes(artistId).catch((e) => {
+      stats.vision.errors.push(`Look-alikes: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200));
+      return null;
+    });
+    if (lookalikes) stats.vision.lookalikes = Object.keys(lookalikes.checks);
+    // Clean fragments for new usable videos.
     const { segmentArtist } = await import("../segments");
     stats.vision.withFragments = (await segmentArtist(artistId)).withSegments;
   }

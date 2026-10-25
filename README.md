@@ -50,6 +50,16 @@ Elke query pagineert tot max N pagina's (`INGEST_MAX_PAGES`, of per run in de UI
 - **Frames:** de frames-check bewaart frames in de privé-bucket `frames` (`{artist}/{video}/…`), zodat herclassificeren geen verlopen TikTok-links meer nodig heeft. Na de beoordeling worden frames van unrelated video's opgeruimd; alleen relevant en review blijven staan. Voor oudere runs: `scripts/prune-frames.ts <artistId>`.
 - **Opslag-interface:** alle media (thumbnails, frames, sheet-foto's, downloads) loopt via `src/lib/media.ts` (`media().put/get/list/remove/signedUrl`). Nu is dat Supabase Storage. Een S3-compatibele store zoals Cloudflare R2 (geen egress-kosten) is één extra klasse, gekozen met `MEDIA_STORE`.
 
+## Look-alikes (automatisch)
+
+`src/lib/lookalikes.ts`, draait na elke frames-check (of los: `scripts/lookalikes.ts <artistId>`):
+1. **Vinden:** hashtags, @accounts en uploaders die vaak voorkomen in video's die de beeldcheck voor de artiest aanzag (relevant of review), zonder dat de post de artiest zelf noemt, en duidelijk vaker dan gemiddeld. Een LLM houdt alleen de personen over (geen events, plekken of merken) en voegt hun tags samen. Bij Russo: Mart Hoogkamer; bij Cristiand: Josylvio.
+2. **Sheet:** foto's uit hun eigen account, op dezelfde manier als het artist sheet (±4–9 credits per persoon). Hun eigen account en fanpagina's gaan op de blokkeerlijst.
+3. **Opnieuw controleren:** bruikbare video's die hen noemen plus 10% steekproef. Per frame kiest Jev tussen de artiest, de look-alike, beiden of iemand anders, met beide sets foto's naast elkaar. Frames zonder de artiest vallen uit de fragmenten; zonder de artiest in minstens 2 frames en een kwart van de frames wordt de video unrelated.
+4. **Terugdraaien:** "Dit is geen look-alike" op de artiestpagina.
+
+Gemeten op 14 met de hand gelabelde video's die een look-alike noemen: onterecht bruikbaar ging van 7/7 naar 2/7, alle echte video's bleven staan.
+
 ## Schone fragmenten
 
 Voor herdistributie: per bruikbare video de stukken waarin de artiest in beeld is, zonder tekst of overlays (een klein watermerk in een hoek mag) en zonder zwarte frames (`src/lib/segments.ts`, tabel `video_segments`). De stap gebruikt de resultaten per frame van de frames-check plus een pixelcheck van de opgeslagen frames. Die meet ook de beeldverhouding en vaste zwarte balken, zodat ze weggesneden kunnen worden. Bij vaste balken wordt het uitsnijvak bepaald door wat er tussen de frames beweegt (captions en emoji's op de balk staan stil en vallen erbuiten), en wordt de tekst na het bijsnijden opnieuw gemeten met Jev. Staat een caption boven- of onderin over het beeld, dan vraagt Jev waar de tekst zit en wordt de kleinste strook (12, 18 of 25% van de hoogte) weggesneden waarbij de tekst echt weg is. Daarna worden de bijgesneden frames opnieuw beoordeeld (tekst, artiest in beeld, geen afgesneden gezicht), en de uitsnede telt alleen als die meer schone seconden oplevert. Bij het maken van een staande video betekent dat maximaal 1,33× inzoomen. De resolutie is 1/12 van de video; de knippunten worden fijner bij het downloaden. Na elke frames-check draait deze stap automatisch; los draaien kan met `scripts/segments.ts <artistId> [--force]`. In het dashboard: "alleen schone fragmenten".

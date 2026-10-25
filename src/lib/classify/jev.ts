@@ -305,3 +305,43 @@ export async function textLayoutWithJev(img: Buffer): Promise<TextLayout> {
   };
   return { hasText: a.hastext.noul, text: a.text.box, hasFace: a.hasface.noul, face: a.face.box, busy: a.busy.noul };
 }
+
+export type WhoLabel = "artist" | "both" | "lookalike" | "someone_else" | "nobody";
+
+// Contrast instead of a yes/no: with the artist's photos and a look-alike's photos side by side,
+// who is in each frame? Jev is weak at absolute face matching but better at choosing between
+// people it can compare. Frames in batches of up to 12 per request.
+export async function whoIsOnScreenWithJev(
+  artist: { name: string; photos: Buffer[]; traits?: string },
+  lookalike: { name: string; photos: Buffer[]; traits?: string },
+  frames: Buffer[],
+): Promise<{ label: WhoLabel; confidence: number }[]> {
+  client ??= new TypeSafeClient({ defaultModel: JEV_MODEL });
+  const options = {
+    artist: `${artist.name}, the person in \`artist_photos\` (and not ${lookalike.name})`,
+    lookalike: `${lookalike.name}, the person in \`lookalike_photos\` (and not ${artist.name})`,
+    both: `Both ${artist.name} and ${lookalike.name}`,
+    someone_else: "Other people, but neither of them",
+    nobody: "No person clearly visible",
+  };
+  const response = await client.systemOne(
+    {
+      state: {
+        artist_photos: Object.fromEntries(artist.photos.map((p, i) => [`photo_${i + 1}`, image(p)])),
+        ...(artist.traits ? { artist_traits: artist.traits } : {}),
+        lookalike_photos: Object.fromEntries(lookalike.photos.map((p, i) => [`photo_${i + 1}`, image(p)])),
+        ...(lookalike.traits ? { lookalike_traits: lookalike.traits } : {}),
+        frames: frames.map((f) => image(f)),
+      },
+      questions: Object.fromEntries(
+        frames.map((_, i) => [`who_${i}`, choice(`Who is visible in \`frames[${i}]\`? Compare faces, hair and build with both photo sets.`, options)]),
+      ),
+    },
+    { headers: { "TypeSafe-Danger-Zone-Images": "true" } },
+  );
+  const answers = response.answers as Record<string, { choice?: string; confidence?: number }>;
+  return frames.map((_, i) => ({
+    label: (answers[`who_${i}`]?.choice ?? "nobody") as WhoLabel,
+    confidence: answers[`who_${i}`]?.confidence ?? 0,
+  }));
+}
