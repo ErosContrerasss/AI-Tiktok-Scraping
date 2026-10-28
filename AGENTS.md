@@ -26,7 +26,7 @@ We zitten in **fase 1: sourcing en verificatie perfectioneren** (stap 1–3, plu
 
 ## 2. Werkafspraken (belangrijk)
 
-- **Meten vóór uitrollen.** Elke verbetering aan verificatie of segmentatie wordt getest op een steekproef die met de hand gelabeld is. Bekijk de frames zelf (contactsheets), en rapporteer precision en recall, vóór en na. Rol pas uit als het aantoonbaar beter is. Testsets bevatten bewust **moeilijke gevallen** (twijfelgevallen, look-alikes) en worden blind gelabeld.
+- **Meten vóór uitrollen.** Elke verbetering aan verificatie of segmentatie wordt getest op een steekproef die met de hand gelabeld is. Bekijk de frames zelf (contactsheets), en rapporteer precision en recall, vóór en na. Rol pas uit als het aantoonbaar beter is. Testsets bevatten bewust **moeilijke gevallen** (twijfelgevallen, look-alikes) en worden blind gelabeld. De bestaande sets staan in **`eval/`** (zie `eval/README.md`); doorrekenen met `scripts/eval-labels.ts eval/<set>.json [--footage] [--list]`. Nieuwe sets horen daar ook, nooit alleen in een tijdelijke map.
 - **Kosten bewaken.** Zeg vooraf wat iets kost, en vraag het eerst als het boven een paar tientjes aan credits uitkomt. Zie §5. Draai geen force-runs over oude video's zonder te weten hoeveel TikTok-links verlopen zijn: één keer kostte dat onverwacht 2.193 credits.
 - **Eerlijk rapporteren.** Wat tegenvalt of niet gelukt is, wordt genoemd. Schattingen worden als schatting gemarkeerd.
 - **Generiek blijven.** Alles moet voor elke artiest werken, niet alleen voor de twee testartiesten. Geen speciale gevallen in de code; artiestspecifieke kennis hoort in de artist card (database).
@@ -80,6 +80,7 @@ Uitschieters worden door Gemini (video plus audio) ontleed tot blauwdrukken per 
 - **Media** loopt via `src/lib/media.ts` (`MediaStore`). Nu is dat Supabase Storage; Cloudflare R2 wordt later één extra klasse. Gebruik altijd `media()` en nooit direct `storage.from()`.
 - **Database:** tabellen `artists`, `videos`, `classifications` (append-only, één rij per laag per run; de laatste rij per laag telt), `video_segments`, `video_stats`, `video_breakdowns`, `playbooks`, `lookalikes`. Views: `video_status` (het effectieve oordeel: human > rules > vision > llm, plus `own` en `out_of_region`), `video_performance`, `video_library`.
 - **Verwerkingsvolgorde na een ingest:** regels → tekstlaag → frames-check → frames opruimen → look-alikes → fragmenten (`classifyArtist` in `src/lib/classify/index.ts`). Draai de frames-check **direct na de ingest**, want TikTok-videolinks verlopen binnen uren tot dagen.
+- **Testsets** in `eval/`: handgelabelde video-id's per artiest (vision v1, vision hard v2, look-alikes v1).
 - **Scripts** in `scripts/`, voor lange runs zonder HTTP-timeouts. Bijvoorbeeld:
   ```
   NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env.local scripts/<script>.ts <artistId> [flags]

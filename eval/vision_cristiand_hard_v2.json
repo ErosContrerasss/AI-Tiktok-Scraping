@@ -1,0 +1,353 @@
+{
+ "set": "vision_cristiand_hard_v2",
+ "artist": "Cristiand",
+ "artist_id": "5de6f55b-9925-4178-89e2-a2f594ad0a7c",
+ "labelled_at": "2026-10-23",
+ "question": "Is de artiest zelf in beeld, in echte footage (niet alleen zijn sound, een foto, merch of een scherm)?",
+ "how": "Gestratificeerd op de frames-check-score op dat moment (relevant >=0.7, review_hi 0.5-0.7, review_lo 0.3-0.5, near_miss 0.15-0.3, deep_no <0.15), zonder overlap met v1. Blind gelabeld op 12 frames (Russo met caption/account erbij voor twijfelgevallen). null = onzeker.",
+ "used_for": "Drempels van de frames-laag (unrelated <=0.5 sinds migratie 0011).",
+ "counts": {
+  "ja": 10,
+  "nee": 39,
+  "onzeker": 6
+ },
+ "labels": {
+  "7519900978103995670": false,
+  "7454282513108847894": null,
+  "7244912044951014662": false,
+  "7437831787092462880": false,
+  "7674104529440247071": false,
+  "7510265111995616534": true,
+  "7010491340970675461": false,
+  "7534699156837895457": false,
+  "7544946883232353557": false,
+  "7425977212454604064": true,
+  "7697991831010807062": false,
+  "7222593374644145435": false,
+  "7160897959524109574": true,
+  "7383154949456153888": true,
+  "7698397003583163681": false,
+  "7527713664846040352": false,
+  "7417037307888405793": null,
+  "7632600741068262670": false,
+  "7698882014778346774": false,
+  "7659543012099263777": true,
+  "7405299203989163306": false,
+  "7660672462300007712": null,
+  "7635244559735344416": false,
+  "7675401076627049761": false,
+  "7262041121470024993": null,
+  "7579714356296846600": false,
+  "7506907243846110486": false,
+  "7032628486778998022": false,
+  "7405600335282130208": false,
+  "7518377789523774753": false,
+  "7699538245247454482": false,
+  "7300379239633734958": false,
+  "7137161336173251883": false,
+  "7653137685871103254": false,
+  "7592576407235087648": null,
+  "7599406480902704417": false,
+  "7376660587654188321": true,
+  "7690894280767917334": false,
+  "7468370322669047073": false,
+  "7505975370227649800": false,
+  "7102522272434359557": true,
+  "7057481215112187141": false,
+  "7274376637565783328": false,
+  "7527329542222974240": false,
+  "7695459573494222113": false,
+  "7570517511398034718": false,
+  "7448605923385380118": false,
+  "7135759266346028294": true,
+  "7529051626921938198": false,
+  "7063306924816764206": false,
+  "7061678303752637701": true,
+  "7620763137997950230": false,
+  "7459069912787553558": null,
+  "7194878163711757574": true,
+  "7423804870999723296": false
+ },
+ "meta": {
+  "7061678303752637701": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.76,
+   "author": "josyllviio"
+  },
+  "7376660587654188321": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.96,
+   "author": "pass.de.aux"
+  },
+  "7102522272434359557": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.89,
+   "author": "joostfrederickx"
+  },
+  "7459069912787553558": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.73,
+   "author": "ka..bts"
+  },
+  "7194878163711757574": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.95,
+   "author": "cirussotv"
+  },
+  "7160897959524109574": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.93,
+   "author": "nbdy4sked"
+  },
+  "7262041121470024993": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.72,
+   "author": "cristiandvault"
+  },
+  "7274376637565783328": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.91,
+   "author": "mexicanhypehouze"
+  },
+  "7659543012099263777": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.94,
+   "author": "betulvwaart"
+  },
+  "7135759266346028294": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.93,
+   "author": "editseh123"
+  },
+  "7454282513108847894": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.91,
+   "author": "cristiandvault"
+  },
+  "7510265111995616534": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.91,
+   "author": "avalonmusic"
+  },
+  "7057481215112187141": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.72,
+   "author": "ka.nett"
+  },
+  "7425977212454604064": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.95,
+   "author": "debesteschoolfeestennl"
+  },
+  "7698397003583163681": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.65,
+   "author": "eltorrro5"
+  },
+  "7653137685871103254": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.5,
+   "author": "cristianmidolo12"
+  },
+  "7417037307888405793": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.9,
+   "author": "cristiandvault"
+  },
+  "7405299203989163306": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.54,
+   "author": "hiforrestt"
+  },
+  "7383154949456153888": {
+   "stratum": "relevant",
+   "p_at_labelling": 0.93,
+   "author": "joostfrederickx"
+  },
+  "7527329542222974240": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.68,
+   "author": "josylvio"
+  },
+  "7063306924816764206": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.57,
+   "author": "cristianislascia"
+  },
+  "7519900978103995670": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.56,
+   "author": "topnotch_nl"
+  },
+  "7660672462300007712": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.53,
+   "author": "dela_309"
+  },
+  "7423804870999723296": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.44,
+   "author": "_kristian.11"
+  },
+  "7592576407235087648": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.54,
+   "author": "101barznl"
+  },
+  "7437831787092462880": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.5,
+   "author": "sgofficieel1"
+  },
+  "7534699156837895457": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.61,
+   "author": "avalonmusic"
+  },
+  "7675401076627049761": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.51,
+   "author": "dutchmusic1"
+  },
+  "7010491340970675461": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.36,
+   "author": "kelfinreus"
+  },
+  "6976784808445889798": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.46,
+   "author": "alianthonij"
+  },
+  "7635244559735344416": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.42,
+   "author": "officialfrsh"
+  },
+  "7698882014778346774": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.38,
+   "author": "samuelderdon"
+  },
+  "7244912044951014662": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.42,
+   "author": "bandstage"
+  },
+  "7690894280767917334": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.34,
+   "author": "itsjustchristiand"
+  },
+  "7579714356296846600": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.36,
+   "author": "ahmed_dynamo"
+  },
+  "7527713664846040352": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.44,
+   "author": "fmkx_"
+  },
+  "7137161336173251883": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.46,
+   "author": "christianrlocke"
+  },
+  "7699538245247454482": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.3,
+   "author": "maulopezzz"
+  },
+  "7300379239633734958": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.22,
+   "author": "lifeoffaithofficial"
+  },
+  "7222593374644145435": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.27,
+   "author": "cristian25pmc"
+  },
+  "7695459573494222113": {
+   "stratum": "review_lo",
+   "p_at_labelling": 0.31,
+   "author": "a.lo.bien.fr"
+  },
+  "7632600741068262670": {
+   "stratum": "review_hi",
+   "p_at_labelling": 0.6,
+   "author": "genosamaratrains"
+  },
+  "7529051626921938198": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.17,
+   "author": "ufceurope"
+  },
+  "7405600335282130208": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.16,
+   "author": "jacopolupinella"
+  },
+  "7468370322669047073": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.29,
+   "author": "_cjma"
+  },
+  "7674104529440247071": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.24,
+   "author": "christianvierlingshow"
+  },
+  "7448605923385380118": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.24,
+   "author": "westwood.denhaag"
+  },
+  "7505975370227649800": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.04,
+   "author": "cristian.show96"
+  },
+  "7032628486778998022": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.22,
+   "author": "insalatacristian"
+  },
+  "7620763137997950230": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.06,
+   "author": "cristianzen23"
+  },
+  "7518377789523774753": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.07,
+   "author": "cristianasaecompanhia"
+  },
+  "7544946883232353557": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.22,
+   "author": "beadlesbabenation"
+  },
+  "7599406480902704417": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.02,
+   "author": "xdenise.0x"
+  },
+  "7506907243846110486": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.15,
+   "author": "dcm.events"
+  },
+  "7570517511398034718": {
+   "stratum": "near_miss",
+   "p_at_labelling": 0.27,
+   "author": "fangirlfanatic"
+  },
+  "7697991831010807062": {
+   "stratum": "deep_no",
+   "p_at_labelling": 0.01,
+   "author": "tsmtournaments"
+  }
+ }
+}

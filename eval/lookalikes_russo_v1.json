@@ -1,0 +1,87 @@
+{
+ "set": "lookalikes_russo_v1",
+ "artist": "Russo",
+ "artist_id": "0e1f02cb-7460-4393-a941-991fc4c95dc5",
+ "labelled_at": "2026-10-25",
+ "lookalikes": "Mart Hoogkamer / Rutger van Barneveld / André Hazes",
+ "question": "Is de artiest zelf in beeld, in echte footage (niet alleen zijn sound, een foto, merch of een scherm)? (ook als de look-alike ernaast staat)",
+ "how": "Alle video's die op 2026-10-25 als relevant stonden en een look-alike noemen (naam, hashtag of account). Gelabeld op 12 frames, met caption/account erbij. null = onzeker (donker, te ver weg, of Russo/Mart niet uit elkaar te houden).",
+ "used_for": "Meting van de look-alike-check (src/lib/lookalikes.ts): vóór 7/7 onterecht bruikbaar, na de eerste run 2/7.",
+ "counts": {
+  "ja": 6,
+  "nee": 4,
+  "onzeker": 7
+ },
+ "labels": {
+  "7005165318054120710": null,
+  "7122183640422927621": null,
+  "7139595008360959238": null,
+  "7455290319072972054": null,
+  "7638191663336262944": false,
+  "7651000553216036129": null,
+  "7652868721614130464": true,
+  "7653202266740051232": null,
+  "7655304888758324502": true,
+  "7658276832961252640": false,
+  "7665027596509302048": true,
+  "7665343062654061846": false,
+  "7672142595404909856": true,
+  "7672452948890225942": null,
+  "7674705409931889953": true,
+  "7689549065591344406": false,
+  "7695219393764003105": true
+ },
+ "meta": {
+  "7005165318054120710": {
+   "author": "maud.wout.ryan"
+  },
+  "7122183640422927621": {
+   "author": "_itsjolanda"
+  },
+  "7139595008360959238": {
+   "author": "biancaa0460"
+  },
+  "7455290319072972054": {
+   "author": "wim.dalmee"
+  },
+  "7638191663336262944": {
+   "author": "cr0wdcuts"
+  },
+  "7651000553216036129": {
+   "author": "bankie4life3"
+  },
+  "7652868721614130464": {
+   "author": "bankie4life3"
+  },
+  "7653202266740051232": {
+   "author": "myrthevsp"
+  },
+  "7655304888758324502": {
+   "author": "deamsterdamsezomer"
+  },
+  "7658276832961252640": {
+   "author": "adtje.eelco"
+  },
+  "7665027596509302048": {
+   "author": "sterrennl"
+  },
+  "7665343062654061846": {
+   "author": "marthoogkamer.fanpage"
+  },
+  "7672142595404909856": {
+   "author": "caitlynkremer"
+  },
+  "7672452948890225942": {
+   "author": "choonsrecordings"
+  },
+  "7674705409931889953": {
+   "author": "caitlynkremer"
+  },
+  "7689549065591344406": {
+   "author": "vclipcentralnl"
+  },
+  "7695219393764003105": {
+   "author": "caitlynkremer"
+  }
+ }
+}

@@ -1,0 +1,43 @@
+{
+ "set": "lookalikes_cristiand_v1",
+ "artist": "Cristiand",
+ "artist_id": "5de6f55b-9925-4178-89e2-a2f594ad0a7c",
+ "labelled_at": "2026-10-25",
+ "lookalikes": "Josylvio",
+ "question": "Is de artiest zelf in beeld, in echte footage (niet alleen zijn sound, een foto, merch of een scherm)? (ook als de look-alike ernaast staat)",
+ "how": "Alle video's die op 2026-10-25 als relevant stonden en een look-alike noemen (naam, hashtag of account). Gelabeld op 12 frames, met caption/account erbij. null = onzeker (donker, te ver weg, of Russo/Mart niet uit elkaar te houden).",
+ "used_for": "Meting van de look-alike-check (src/lib/lookalikes.ts): vóór 7/7 onterecht bruikbaar, na de eerste run 2/7.",
+ "counts": {
+  "ja": 1,
+  "nee": 3,
+  "onzeker": 2
+ },
+ "labels": {
+  "7057481215112187141": false,
+  "7433029510557207841": true,
+  "7459069912787553558": null,
+  "7624586482065493281": false,
+  "7637932859986087201": false,
+  "7686262929343417633": null
+ },
+ "meta": {
+  "7057481215112187141": {
+   "author": "ka.nett"
+  },
+  "7433029510557207841": {
+   "author": "catchthatbarrier"
+  },
+  "7459069912787553558": {
+   "author": "ka..bts"
+  },
+  "7624586482065493281": {
+   "author": "realraptv.nl"
+  },
+  "7637932859986087201": {
+   "author": "spitsessies.nl"
+  },
+  "7686262929343417633": {
+   "author": "tweestrijd"
+  }
+ }
+}
