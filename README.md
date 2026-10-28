@@ -1,5 +1,7 @@
 # Artist Radar
 
+> Werk je met een AI-agent (Codex, Claude Code) aan dit project? Lees eerst [AGENTS.md](AGENTS.md): de stip op de horizon, de huidige fase, werkafspraken en geleerde lessen.
+
 Interne testtool: per artiest zoveel mogelijk TikTok-content vinden, ruis eruit filteren en bruikbare video's on demand downloaden.
 
 **Stack:** Next.js (App Router, TS) + Tailwind · Supabase (Postgres + Storage) · [Social Fetch](https://www.socialfetch.dev) voor TikTok-data · Claude Haiku of Gemini Flash-Lite voor classificatie. Alle API-calls gebeuren server-side; keys staan alleen in `.env.local`.
